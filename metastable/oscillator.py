@@ -71,10 +71,16 @@ class ROSet(Module):
         #self.comb += cd_chain.clk.eq(oscillators[0].ring_out)
         self.comb += cd_chain.clk.eq(mux[select])
         #self.sync.chain += counter.eq(counter + 1)
+        resetn = Signal()
         self.sync.chain += [
             If(enable,
-                counter.eq(counter + 1)
+                If(resetn,
+                    counter.eq(C(1, len(counter))),
+                    resetn.eq(0)
+                ).Else(
+                    counter.eq(counter + 1)
+                )
             ).Else(
-                counter.eq(C(0,len(counter)))
+                resetn.eq(1)
             )
         ]
