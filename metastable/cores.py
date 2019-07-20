@@ -94,16 +94,16 @@ class RingClock(Module, AutoCSR):
 
 class RingOscillatorPUF(Module, AutoCSR):
     def __init__(self, enable, pads, oscillators, clock_domain="sys"):
-        self.comparator = comparator = Signal()
+        self.bit_value = comparator = Signal()
 
         self._enable = CSRStorage(reset=0)
         self._cell0_select = select0 = CSRStorage(8)
         self._cell1_select = select1 = CSRStorage(8)
-        self._comparator = CSRStatus(reset=0)
+        self._bit_value = CSRStatus(reset=0)
 
         self.specials += [
             MultiReg(self._enable.storage, enable, clock_domain),
-            MultiReg(comparator, self._comparator.status, clock_domain),
+            MultiReg(comparator, self._bit_value.status, clock_domain),
         ]
 
         ro_sets = (
@@ -120,16 +120,16 @@ class RingOscillatorPUF(Module, AutoCSR):
 
 class TransientEffectRingOscillatorPUF(Module, AutoCSR):
     def __init__(self, enable, pads, cell_sets, clock_domain="sys"):
-        self.comparator = comparator = Signal(16)
+        self.bit_value = comparator = Signal(16)
 
         self._enable = CSRStorage(reset=0)
         self._cell0_select = select0 = CSRStorage(8)
         self._cell1_select = select1 = CSRStorage(8)
-        self._comparator = CSRStatus(16, reset=0)
+        self._bit_value = CSRStatus(16, reset=0)
 
         self.specials += [
             MultiReg(self._enable.storage, enable, clock_domain),
-            MultiReg(comparator, self._comparator.status, clock_domain),
+            MultiReg(comparator, self._bit_value.status, clock_domain),
         ]
 
         ro_sets = (
@@ -142,6 +142,57 @@ class TransientEffectRingOscillatorPUF(Module, AutoCSR):
 
         self.comb += comparator.eq(ro_sets[0].counter - ro_sets[1].counter)
         self.comb += pads.out.eq(ro_sets[0].counter[-1])
+
+
+class PowerOptimizedHybridOscillatorArbiterPUF(Module, AutoCSR):
+    def __init__(self, enable, pads, oscillators, clock_domain="sys"):
+        self.bit_value = bit_value = Signal()
+
+        self._enable = CSRStorage(reset=0)
+        self._cell0_select = select0 = CSRStorage(8)
+        self._cell1_select = select1 = CSRStorage(8)
+        self._bit_value = CSRStatus(reset=0)
+
+        self.specials += [
+            MultiReg(self._enable.storage, enable, clock_domain),
+            MultiReg(bit_value, self._bit_value.status, clock_domain),
+        ]
+
+        ro_sets = (
+            ROSet(enable, select0.storage, oscillators[0]),
+            ROSet(enable, select1.storage, oscillators[1]),
+        )
+
+        d_flipflop = Instance("SB_DFF",
+            i_D=ro_sets[0].ring_out,
+            i_C=ro_sets[1].ring_out,
+            o_Q=bit_value)
+        self.specials += d_flipflop
+
+        #self.submodules += ro_sets
+        self.submodules.ro_set0 = ro_sets[0]
+        self.submodules.ro_set1 = ro_sets[1]
+
+
+class SpeedOptimizedHybridOscillatorArbiterPUF(Module, AutoCSR):
+    def __init__(self, enable, pads, oscillators, clock_domain="sys"):
+        self.key = key = Signal(len(oscillators[0]))
+
+        self._enable = CSRStorage(reset=0)
+        self._key = CSRStatus(len(key), reset=0)
+
+        self.specials += [
+            MultiReg(self._enable.storage, enable, clock_domain),
+            MultiReg(key, self._key.status, clock_domain),
+        ]
+
+        for i, ro in enumerate(zip(*oscillators)):
+            d_flipflop = Instance("SB_DFF",
+                i_D=ro[0].ring_out,
+                i_C=ro[1].ring_out,
+                o_Q=key[i])
+            self.specials += d_flipflop
+            self.submodules += ro
 
 
 class Muxer(Module, AutoCSR):

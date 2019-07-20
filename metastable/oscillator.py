@@ -79,6 +79,9 @@ class ROSet(Module):
         self.submodules += oscillators
         mux = Array(ro.ring_out for ro in oscillators)
 
+        self.ring_out = Signal()
+        self.comb += self.ring_out.eq(mux[select])
+
         cd_chain = ClockDomain(reset_less=True)
         self.clock_domains += cd_chain
 
