@@ -74,17 +74,17 @@ class ROSet(Module):
 
         #self.comb += cd_chain.clk.eq(oscillators[0].ring_out)
         self.comb += cd_chain.clk.eq(mux[select])
-        #self.sync.chain += counter.eq(counter + 1)
-        resetn = Signal()
-        self.sync.chain += [
+        self.submodules.counter_fsm = ClockDomainsRenamer("chain")(FSM(reset_state="OSCILLATING"))
+        self.counter_fsm.act("IDLE",
             If(enable,
-                If(resetn,
-                    counter.eq(C(1, len(counter))),
-                    resetn.eq(0)
-                ).Else(
-                    counter.eq(counter + 1)
-                )
-            ).Else(
-                resetn.eq(1)
+                NextValue(counter, 1),
+                NextState("OSCILLATING")
             )
-        ]
+        )
+        self.counter_fsm.act("OSCILLATING",
+            If(enable,
+                NextValue(counter, counter + 1)
+            ).Else(
+                NextState("IDLE")
+            )
+        )
