@@ -118,6 +118,32 @@ class RingOscillatorPUF(Module, AutoCSR):
         self.comb += pads.out.eq(ro_sets[0].counter[-1])
 
 
+class TransientEffectRingOscillatorPUF(Module, AutoCSR):
+    def __init__(self, enable, pads, cell_sets, clock_domain="sys"):
+        self.comparator = comparator = Signal(16)
+
+        self._enable = CSRStorage(reset=0)
+        self._cell0_select = select0 = CSRStorage(8)
+        self._cell1_select = select1 = CSRStorage(8)
+        self._comparator = CSRStatus(16, reset=0)
+
+        self.specials += [
+            MultiReg(self._enable.storage, enable, clock_domain),
+            MultiReg(comparator, self._comparator.status, clock_domain),
+        ]
+
+        ro_sets = (
+            ROSet(enable, select0.storage, cell_sets[0], counter=Signal(16)),
+            ROSet(enable, select1.storage, cell_sets[1], counter=Signal(16)),
+        )
+        #self.submodules += ro_sets
+        self.submodules.ro_set0 = ro_sets[0]
+        self.submodules.ro_set1 = ro_sets[1]
+
+        self.comb += comparator.eq(ro_sets[0].counter - ro_sets[1].counter)
+        self.comb += pads.out.eq(ro_sets[0].counter[-1])
+
+
 class Muxer(Module, AutoCSR):
     def __init__(self, pads, length):
         mux = Array(C(i, 16) for i in reversed(range(8)))

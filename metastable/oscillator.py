@@ -60,6 +60,16 @@ class RingOscillator(Module):
         self.submodules.chain = chain = Chain(enable, placement, ring_out, ring_out)
 
 
+class TEROCell(Module):
+    def __init__(self, enable, placement, ring_out=None):
+        if ring_out is None:
+            ring_out = Signal()
+        self.ring_out = ring_out
+        ring_in = Signal()
+        self.submodules.chain1 = Chain(enable, placement[0], ring_in, ring_out)
+        self.submodules.chain2 = Chain(enable, placement[1], ring_out, ring_in)
+
+
 class ROSet(Module):
     def __init__(self, enable, select, oscillators, counter=None):
         if counter is None:
