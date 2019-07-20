@@ -92,9 +92,9 @@ class RingClock(Module, AutoCSR):
         self.comb += pads.out.eq(counter[-1])
 
 
-class ROPUF(Module, AutoCSR):
+class RingOscillatorPUF(Module, AutoCSR):
     def __init__(self, enable, pads, oscillators, clock_domain="sys"):
-        comparator = Signal()
+        self.comparator = comparator = Signal()
 
         self._enable = CSRStorage(reset=0)
         self._cell0_select = select0 = CSRStorage(8)
