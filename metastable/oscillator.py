@@ -23,7 +23,7 @@ class Chain(Module):
         self.comb += buffers_in.eq(Cat(chain_in, buffers_out[0:-1]))
         self.comb += chain_out.eq(buffers_out[-1])
 
-        bel = lambda pos: {"a_BEL": pos} if pos else None
+        bel = lambda pos: {"a_BEL": pos} if pos else {}
         chain_iter = zip(map(bel, placement), zip(buffers_in, buffers_out))
         
         attrs, (buf_in, buf_out) = next(chain_iter)
