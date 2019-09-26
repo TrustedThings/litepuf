@@ -66,8 +66,9 @@ class RingOscillator2(Module, AutoCSR):
 
 
 class RingClock(Module, AutoCSR):
-    def __init__(self, pads, length, clock_domain="sys"):
-        counter  = Signal(24)
+    def __init__(self, pads, length, counter=None, clock_domain="sys"):
+        if counter is None:
+            counter  = Signal(24)
         enable = Signal()
 
         self._enable = CSRStorage(reset=0)
@@ -80,8 +81,8 @@ class RingClock(Module, AutoCSR):
 
         # chain_out = Signal()
         # self.submodules.ring = RingOscillator(enable, length, chain_out)
-
-        self.submodules.ring = ring = RingOscillator(enable, length)
+        placement = [None] * length # no explicit placement
+        self.submodules.ring = ring = RingOscillator(enable, placement)
         chain_out = ring.ring_out
 
         cd_chain = ClockDomain(reset_less=True)
@@ -93,7 +94,9 @@ class RingClock(Module, AutoCSR):
 
 
 class RingOscillatorPUF(Module, AutoCSR):
-    def __init__(self, enable, pads, oscillators, clock_domain="sys"):
+    def __init__(self, enable, oscillators, ring_out=None, clock_domain="sys"):
+        if ring_out is None:
+            ring_out = Signal()
         self.bit_value = comparator = Signal()
 
         self._enable = CSRStorage(reset=0)
@@ -115,11 +118,10 @@ class RingOscillatorPUF(Module, AutoCSR):
         self.submodules.ro_set1 = ro_sets[1]
 
         self.comb += comparator.eq(ro_sets[0].counter < ro_sets[1].counter)
-        self.comb += pads.out.eq(ro_sets[0].counter[-1])
 
 
 class TransientEffectRingOscillatorPUF(Module, AutoCSR):
-    def __init__(self, enable, pads, cell_sets, clock_domain="sys"):
+    def __init__(self, enable, cell_sets, clock_domain="sys"):
         self.bit_value = comparator = Signal(16)
 
         self._enable = CSRStorage(reset=0)
@@ -141,7 +143,7 @@ class TransientEffectRingOscillatorPUF(Module, AutoCSR):
         self.submodules.ro_set1 = ro_sets[1]
 
         self.comb += comparator.eq(ro_sets[0].counter - ro_sets[1].counter)
-        self.comb += pads.out.eq(ro_sets[0].counter[-1])
+        #self.comb += pads.out.eq(ro_sets[0].counter[-1])
 
 
 class PowerOptimizedHybridOscillatorArbiterPUF(Module, AutoCSR):
@@ -163,9 +165,9 @@ class PowerOptimizedHybridOscillatorArbiterPUF(Module, AutoCSR):
             ROSet(enable, select1.storage, oscillators[1]),
         )
 
-        d_flipflop = Instance("SB_DFF",
+        d_flipflop = Instance("FD1S3AX",
             i_D=ro_sets[0].ring_out,
-            i_C=ro_sets[1].ring_out,
+            i_CK=ro_sets[1].ring_out,
             o_Q=bit_value)
         self.specials += d_flipflop
 
@@ -175,7 +177,7 @@ class PowerOptimizedHybridOscillatorArbiterPUF(Module, AutoCSR):
 
 
 class SpeedOptimizedHybridOscillatorArbiterPUF(Module, AutoCSR):
-    def __init__(self, enable, pads, oscillators, clock_domain="sys"):
+    def __init__(self, enable, oscillators, clock_domain="sys"):
         self.key = key = Signal(len(oscillators[0]))
 
         self._enable = CSRStorage(reset=0)
@@ -187,9 +189,9 @@ class SpeedOptimizedHybridOscillatorArbiterPUF(Module, AutoCSR):
         ]
 
         for i, ro in enumerate(zip(*oscillators)):
-            d_flipflop = Instance("SB_DFF",
+            d_flipflop = Instance("FD1S3AX",
                 i_D=ro[0].ring_out,
-                i_C=ro[1].ring_out,
+                i_CK=ro[1].ring_out,
                 o_Q=key[i])
             self.specials += d_flipflop
             self.submodules += ro
