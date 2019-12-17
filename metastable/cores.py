@@ -65,7 +65,38 @@ class RingOscillator2(Module, AutoCSR):
         self.comb += pads.out.eq(counter[-1])
 
 
-class RingClock(Module, AutoCSR):
+class PulseComparator(Module):
+    def __init__(self):
+        self.reset = Signal()
+        self.pulse0 = Signal()
+        self.pulse1 = Signal()
+        self.select = Signal()
+        self.ready = Signal()
+
+        q0 = Signal()
+        q1 = Signal()
+
+        d_flipflops = (
+            Instance("FD1S3DX",
+                i_D=q0|~q1,
+                i_CK=self.pulse0,
+                i_CD=self.reset,
+                o_Q=q0),
+            Instance("FD1S3DX",
+                i_D=~q0|q1,
+                i_CK=self.pulse1,
+                i_CD=self.reset,
+                o_Q=q1)
+        )
+        self.specials += d_flipflops
+
+        self.comb += [
+            self.select.eq(q0),
+            self.ready.eq(q0|q1)
+        ]
+
+
+class ClockGenerator(Module, AutoCSR):
     def __init__(self, pads, length, counter=None, clock_domain="sys"):
         if counter is None:
             counter  = Signal(24)
@@ -94,56 +125,81 @@ class RingClock(Module, AutoCSR):
 
 
 class RingOscillatorPUF(Module, AutoCSR):
-    def __init__(self, enable, oscillators, ring_out=None, clock_domain="sys"):
-        if ring_out is None:
-            ring_out = Signal()
+    def __init__(self, oscillators, clock_domain="sys"):
         self.bit_value = comparator = Signal()
+        self.reset = Signal()
 
-        self._enable = CSRStorage(reset=0)
+        self._reset = CSRStorage(reset=1)
         self._cell0_select = select0 = CSRStorage(8)
         self._cell1_select = select1 = CSRStorage(8)
         self._bit_value = CSRStatus(reset=0)
 
-        self.specials += [
-            MultiReg(self._enable.storage, enable, clock_domain),
-            MultiReg(comparator, self._bit_value.status, clock_domain),
+        ro_sets = (
+            ROSet(oscillators[0]),
+            ROSet(oscillators[1]),
+        )
+        self.comb += [
+            ro_sets[0].reset.eq(self.reset),
+            ro_sets[1].reset.eq(self.reset)
         ]
 
-        ro_sets = (
-            ROSet(enable, select0.storage, oscillators[0]),
-            ROSet(enable, select1.storage, oscillators[1]),
-        )
         #self.submodules += ro_sets
         self.submodules.ro_set0 = ro_sets[0]
         self.submodules.ro_set1 = ro_sets[1]
 
-        self.comb += comparator.eq(ro_sets[0].counter < ro_sets[1].counter)
+        self.specials += [
+            MultiReg(self._reset.storage, self.reset, clock_domain),
+            MultiReg(select0.storage, ro_sets[0].select, clock_domain),
+            MultiReg(select1.storage, ro_sets[1].select, clock_domain),
+            MultiReg(comparator, self._bit_value.status, clock_domain),
+        ]
+
+        ro_sets[0].add_counter(20)
+        ro_sets[1].add_counter(20)
+        #self.comb += comparator.eq(ro_sets[0].counter < ro_sets[1].counter)
+
+        self.submodules.pulse_comp = PulseComparator()
+        self.comb += [
+            self.pulse_comp.reset.eq(self.reset),
+            self.pulse_comp.pulse0.eq(ro_sets[0].counter[-1]),
+            self.pulse_comp.pulse1.eq(ro_sets[1].counter[-1])
+        ]
+        self.comb += comparator.eq(self.pulse_comp.select)
 
 
 class TransientEffectRingOscillatorPUF(Module, AutoCSR):
-    def __init__(self, enable, cell_sets, clock_domain="sys"):
+    def __init__(self, cell_sets, clock_domain="sys"):
         self.bit_value = comparator = Signal(16)
+        self.reset = Signal()
 
         self._enable = CSRStorage(reset=0)
         self._cell0_select = select0 = CSRStorage(8)
         self._cell1_select = select1 = CSRStorage(8)
         self._bit_value = CSRStatus(16, reset=0)
 
-        self.specials += [
-            MultiReg(self._enable.storage, enable, clock_domain),
-            MultiReg(comparator, self._bit_value.status, clock_domain),
+        ro_sets = (
+            ROSet(cell_sets[0]),
+            ROSet(cell_sets[1]),
+        )
+        self.comb += [
+            ro_sets[0].reset.eq(self.reset),
+            ro_sets[1].reset.eq(self.reset)
         ]
 
-        ro_sets = (
-            ROSet(enable, select0.storage, cell_sets[0], counter=Signal(16)),
-            ROSet(enable, select1.storage, cell_sets[1], counter=Signal(16)),
-        )
         #self.submodules += ro_sets
         self.submodules.ro_set0 = ro_sets[0]
         self.submodules.ro_set1 = ro_sets[1]
 
+        self.specials += [
+            MultiReg(self._reset.storage, self.reset, clock_domain),
+            MultiReg(select0.storage, ro_sets[0].select, clock_domain),
+            MultiReg(select1.storage, ro_sets[1].select, clock_domain),
+            MultiReg(comparator, self._bit_value.status, clock_domain),
+        ]
+
+        ro_sets[0].add_counter(16)
+        ro_sets[1].add_counter(16)
         self.comb += comparator.eq(ro_sets[0].counter - ro_sets[1].counter)
-        #self.comb += pads.out.eq(ro_sets[0].counter[-1])
 
 
 class PowerOptimizedHybridOscillatorArbiterPUF(Module, AutoCSR):
@@ -206,4 +262,4 @@ class Muxer(Module, AutoCSR):
 
         self.sync += counter.status.eq(mux[select.storage])
 
-        self.submodules += RingClock(pads, length)
+        self.submodules += ClockGenerator(pads, length)
