@@ -80,8 +80,7 @@ class TrellisChain(Module):
     def __init__(self, placement):
         self.enable = Signal()
         self.chain_in = Signal()
-        self.chain_out = Signal()
-        self.chain_out.attr.add("noglobal")
+        self.chain_out = Signal(attr={"noglobal"})
         #self.chain_out.attr.add("keep") # check
 
         buffers_in = Signal(len(placement))
@@ -90,12 +89,10 @@ class TrellisChain(Module):
         self.comb += buffers_in.eq(Cat(self.chain_in, buffers_out[0:-1]))
         self.comb += self.chain_out.eq(buffers_out[-1])
 
-        bel = lambda pos: {"a_BEL": pos} if pos else {}
+        bel = lambda pos: ("BEL", pos) if pos else ()
         chain_iter = zip(map(bel, placement), zip(buffers_in, buffers_out))
         
-        attrs, (buf_in, buf_out) = next(chain_iter)
-        print("**attrs")
-        print(attrs)
+        attr, (buf_in, buf_out) = next(chain_iter)
         initializer = Instance("TRELLIS_SLICE",
                                 p_LUT0_INITVAL=0x0007, # NAND
                                 i_A0=buf_in,
@@ -103,10 +100,10 @@ class TrellisChain(Module):
                                 i_C0=0,
                                 i_D0=0,
                                 o_F0=buf_out,
-                                **attrs)
+                                attr=[attr])
         self.specials += initializer
 
-        for attrs, (buf_in, buf_out) in chain_iter:
+        for attr, (buf_in, buf_out) in chain_iter:
             delay = Instance("TRELLIS_SLICE",
                                     p_LUT0_INITVAL=0x0002, # delay
                                     i_A0=buf_in,
@@ -114,7 +111,7 @@ class TrellisChain(Module):
                                     i_C0=0,
                                     i_D0=0,
                                     o_F0=buf_out,
-                                    **attrs)
+                                    attr=[attr])
             self.specials += delay
 
 
