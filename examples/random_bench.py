@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 
-from itertools import cycle, islice, chain, count
 from os import path
 
 from migen import *
-from migen.genlib.io import CRG
 
 from litex.soc.cores.uart import UARTWishboneBridge
 
@@ -15,27 +13,9 @@ from litex_boards.community.targets.ecp5_evn import BaseSoC
 
 from litescope import LiteScopeIO, LiteScopeAnalyzer
 
-from metastable import RingOscillator, TEROCell
+from metastable import RingOscillator
 from metastable.oscillator import MetastableOscillator
-from metastable.cores import RingOscillatorPUF, TransientEffectRingOscillatorPUF as TEROPUF, SpeedOptimizedHybridOscillatorArbiterPUF as HybridOscillatorArbiterPUF
 from metastable.random import RandomLFSR
-
-def slicer():
-    slice_iter = cycle("ABCD")
-    for i in count(0):
-        for _ in range(4):
-            yield (i, next(slice_iter))
-
-def ro_placer(num_chains, chain_length):
-    for chain in range(num_chains):
-        yield [f"X{4+column}/Y{11+chain}/SLICE{slice_id}" for column, slice_id in islice(slicer(), chain_length)]
-
-def tero_placer(num_cells, chain_length):
-    for cell in range(num_cells):
-        yield (
-            [f"X{2+column}/Y{2+cell}/SLICE{slice_id}" for column, slice_id in islice(slicer(), chain_length)],
-            [f"X{4+column}/Y{2+cell}/SLICE{slice_id}" for column, slice_id in islice(slicer(), chain_length)],
-        )
 
 
 class LiteScopeSoC(BaseSoC):

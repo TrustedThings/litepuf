@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 
-from itertools import cycle, islice, chain, count
-
 from migen import *
-from migen.genlib.io import CRG
 
 from litex.soc.cores.uart import UARTWishboneBridge
 
@@ -14,10 +11,8 @@ from litex_boards.community.targets.ecp5_evn import BaseSoC
 
 from litescope import LiteScopeIO, LiteScopeAnalyzer
 
-from metastable import RingOscillator, TEROCell
+from metastable import RingOscillator
 from metastable.oscillator import MetastableOscillator
-from metastable.cores import RingOscillatorPUF, TransientEffectRingOscillatorPUF as TEROPUF, SpeedOptimizedHybridOscillatorArbiterPUF as HybridOscillatorArbiterPUF
-from metastable.random import RandomLFSR
 
 
 class LiteScopeSoC(BaseSoC):
