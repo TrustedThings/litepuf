@@ -3,6 +3,7 @@
 
 from migen import *
 from migen.genlib.cdc import MultiReg
+from migen.genlib.resetsync import AsyncResetSynchronizer
 
 
 platform = "trellis"
@@ -178,22 +179,23 @@ class ROSet(Module):
         self.ring_out = Signal()
         self.comb += self.ring_out.eq(mux[self.select])
 
-        cd_chain = ClockDomain(reset_less=True)
-        self.clock_domains += cd_chain
+        self.clock_domains.cd_chain = ClockDomain()
 
-        #self.comb += cd_chain.clk.eq(oscillators[0].ring_out)
-        self.comb += cd_chain.clk.eq(mux[self.select])
+        #self.comb += self.cd_chain.clk.eq(oscillators[0].ring_out)
+        self.comb += self.cd_chain.clk.eq(mux[self.select])
 
     def add_counter(self, width):
-        self.counter = Signal(width)
+        self.counter = Signal(width, reset=0)
 
-        # self.sync.chain += self.counter.eq(self.counter + 1)
-        self.sync.chain += \
-            If(self.reset,
-                self.counter.eq(0)
-            ).Else(
-                self.counter.eq(self.counter + 1)
-            )
+        self.sync.chain += self.counter.eq(self.counter + 1)
+        self.specials += AsyncResetSynchronizer(self.cd_chain, self.reset)
+        #self.comb += self.cd_chain.rst.eq(self.reset)
+        # self.sync.chain += \
+        #     If(self.reset,
+        #         self.counter.eq(0)
+        #     ).Else(
+        #         self.counter.eq(self.counter + 1)
+        #     )
 
     def add_counter_fsm(self):
         self.counter = Signal(width)
