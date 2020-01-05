@@ -80,7 +80,7 @@ class TrellisChain(Module):
     def __init__(self, placement):
         self.enable = Signal()
         self.chain_in = Signal()
-        self.chain_out = Signal(attr={"noglobal"})
+        self.chain_out = Signal(attr={("noglobal", 1)})
         #self.chain_out.attr.add("keep") # check
 
         buffers_in = Signal(len(placement))
@@ -91,7 +91,7 @@ class TrellisChain(Module):
 
         bel = lambda pos: ("BEL", pos) if pos else ()
         chain_iter = zip(map(bel, placement), zip(buffers_in, buffers_out))
-        
+
         attr, (buf_in, buf_out) = next(chain_iter)
         initializer = Instance("TRELLIS_SLICE",
                                 p_LUT0_INITVAL=0x0007, # NAND
@@ -154,8 +154,8 @@ class TEROCell(Module):
     def __init__(self, placement):
         self.enable = Signal()
         self.ring_out = Signal()
-        self.submodules.chain1 = self.chain_cls(enable, placement[0], ring_in, ring_out)
-        self.submodules.chain2 = self.chain_cls(enable, placement[1], ring_out, ring_in)
+        self.submodules.chain1 = self.chain_cls(placement[0])
+        self.submodules.chain2 = self.chain_cls(placement[1])
 
         self.comb += [
             self.chain1.enable.eq(self.enable),
@@ -183,7 +183,7 @@ class ROSet(Module):
 
         #self.comb += cd_chain.clk.eq(oscillators[0].ring_out)
         self.comb += cd_chain.clk.eq(mux[self.select])
-    
+
     def add_counter(self, width):
         self.counter = Signal(width)
 
@@ -194,7 +194,7 @@ class ROSet(Module):
             ).Else(
                 self.counter.eq(self.counter + 1)
             )
-    
+
     def add_counter_fsm(self):
         self.counter = Signal(width)
 
