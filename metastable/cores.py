@@ -169,13 +169,13 @@ class RingOscillatorPUF(Module, AutoCSR):
 
 class TransientEffectRingOscillatorPUF(Module, AutoCSR):
     def __init__(self, cell_sets, clock_domain="sys"):
-        self.bit_value = comparator = Signal(16)
+        self.bit_value = comparator = Signal(32)
         self.reset = Signal()
 
-        self._enable = CSRStorage(reset=0)
+        self._reset = CSRStorage(reset=1)
         self._cell0_select = select0 = CSRStorage(8)
         self._cell1_select = select1 = CSRStorage(8)
-        self._bit_value = CSRStatus(16, reset=0)
+        self._bit_value = CSRStatus(32, reset=0)
 
         ro_sets = (
             ROSet(cell_sets[0]),
@@ -197,8 +197,8 @@ class TransientEffectRingOscillatorPUF(Module, AutoCSR):
             MultiReg(comparator, self._bit_value.status, clock_domain),
         ]
 
-        ro_sets[0].add_counter(16)
-        ro_sets[1].add_counter(16)
+        ro_sets[0].add_counter(32)
+        ro_sets[1].add_counter(32)
         self.comb += comparator.eq(ro_sets[0].counter - ro_sets[1].counter)
 
 
