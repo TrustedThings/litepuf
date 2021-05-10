@@ -5,11 +5,12 @@ from os import path
 from migen import *
 
 from litex.soc.cores.uart import UARTWishboneBridge
+from litex.soc.integration.builder import Builder
 
 from litex.build.generic_platform import Subsignal, IOStandard, Pins
 
-from litex_boards.community.platforms import ecp5_evn
-from litex_boards.community.targets.ecp5_evn import BaseSoC
+from litex_boards.platforms import ecp5_evn
+from litex_boards.targets.ecp5_evn import BaseSoC
 
 from litescope import LiteScopeIO, LiteScopeAnalyzer
 
@@ -32,26 +33,26 @@ class LiteScopeSoC(BaseSoC):
             cpu_type=None,
             csr_data_width=32,
             with_uart=False,
-            ident="Litescope example design", ident_version=True,
+            # ident="Litescope example design", ident_version=True,
             with_timer=False
         )
         
         # bridge
-        self.add_cpu(UARTWishboneBridge(self.platform.request("serial"),
-            sys_clk_freq, baudrate=115200))
-        self.add_wb_master(self.cpu.wishbone)
+        bridge = UARTWishboneBridge(self.platform.request("serial"), sys_clk_freq, baudrate=115200)
+        self.submodules.bridge = bridge
+        self.add_wb_master(bridge.wishbone)
 
         self.platform.add_source_dir(path.join(path.dirname(__file__), 'verilog/lattice_ecp5'))
         self.platform.add_source(path.join(path.dirname(__file__), 'verilog/lfsr.v'))
         self.platform.add_source(path.join(path.dirname(__file__), 'verilog/random.v'))
 
         metastable = Signal(name_override="metastable")
-        metastable.attr.add("keep")
+        metastable.attr.add(("keep", 1))
         rand_out = Signal(8, name_override="lfsr_weak")
         
         chain_out = Signal(name_override="chain_out")#, attr=set(["keep", ("noglobal", "1")]))
-        chain_out.attr.add("keep")
-        chain_out.attr.add(("noglobal", None))
+        chain_out.attr.add(("keep", 1))
+        chain_out.attr.add(("noglobal", 1))
         
         self.submodules.ro = RingOscillator(
             [
@@ -81,8 +82,8 @@ class LiteScopeSoC(BaseSoC):
                     ),
         ]
 
-        osci = MetastableOscillator(*[RingOscillator([None]*3) for _ in range(4)])
-        self.submodules.trng = trng = RandomLFSR(osci)
+        oscillators = [RingOscillator([None]*5) for _ in range(4)]
+        self.submodules.trng = trng = RandomLFSR(oscillators)
 
         analyzer_groups[0] = [
             rand_out,
@@ -92,7 +93,11 @@ class LiteScopeSoC(BaseSoC):
         analyzer_groups[1] = [
             trng.word_ready,
             trng.reset,
-            trng.shiftreg
+            trng.word_o,
+            trng.metastable,
+            trng.oscillators_o,
+            trng.counter_rng,
+            trng.trng,
         ]
 
         # analyzer
@@ -103,17 +108,12 @@ class LiteScopeSoC(BaseSoC):
 
 
 soc = LiteScopeSoC()
-vns = soc.platform.build(soc)
+builder = Builder(soc, csr_csv="test/csr.csv", csr_json="test/csr.json")
+vns = builder.build(nowidelut=True, ignoreloops=True)
 
 #
 # Create csr and analyzer files
 #
 soc.finalize()
-from litex.build.tools import write_to_file
-from litex.soc.integration import cpu_interface
 
-csr_csv = cpu_interface.get_csr_csv(soc.csr_regions, soc.constants, soc.mem_regions)
-csr_json = cpu_interface.get_csr_json(soc.csr_regions, soc.constants, soc.mem_regions)
-write_to_file("test/csr.csv", csr_csv)
-write_to_file("test/csr.json", csr_json)
 soc.do_exit(vns)
