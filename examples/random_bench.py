@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from os import path
+from itertools import cycle, islice, chain, count
 
 from migen import *
 
@@ -18,6 +19,17 @@ from metastable import RingOscillator
 from metastable.oscillator import MetastableOscillator
 from metastable.random import RandomLFSR
 
+def slicer():
+    slice_iter = cycle("ABCD")
+    for i in count(0):
+        for _ in range(4):
+            yield (i, next(slice_iter))
+
+def ro_placer(num_chains, chain_length):
+    for chain in range(num_chains):
+        placement = [f"X{4+column}/Y{11+chain}/SLICE{slice_id}" for column, slice_id in islice(slicer(), chain_length)]
+        print(placement)
+        yield placement
 
 class LiteScopeSoC(BaseSoC):
     csr_map = {
@@ -27,7 +39,7 @@ class LiteScopeSoC(BaseSoC):
     csr_map.update(BaseSoC.csr_map)
 
     def __init__(self):
-        sys_clk_freq = int(60e6) # check
+        sys_clk_freq = int(50e6) # check
 
         BaseSoC.__init__(self, sys_clk_freq, x5_clk_freq=int(50e6), toolchain="trellis", # check
             cpu_type=None,
@@ -38,7 +50,7 @@ class LiteScopeSoC(BaseSoC):
         )
         
         # bridge
-        bridge = UARTWishboneBridge(self.platform.request("serial"), sys_clk_freq, baudrate=115200)
+        bridge = UARTWishboneBridge(self.platform.request("serial"), sys_clk_freq, baudrate=923076)
         self.submodules.bridge = bridge
         self.add_wb_master(bridge.wishbone)
 
@@ -82,7 +94,7 @@ class LiteScopeSoC(BaseSoC):
                     ),
         ]
 
-        oscillators = [RingOscillator([None]*5) for _ in range(4)]
+        oscillators = [RingOscillator(placement) for placement in ro_placer(4, 5)]
         self.submodules.trng = trng = RandomLFSR(oscillators)
 
         analyzer_groups[0] = [
@@ -100,11 +112,15 @@ class LiteScopeSoC(BaseSoC):
             trng.trng,
         ]
 
-        # analyzer
-        self.submodules.analyzer = LiteScopeAnalyzer(analyzer_groups, 512)
+        analyzer_signals = [
+            trng.metastable,
+        ]
 
-    def do_exit(self, vns):
-        self.analyzer.export_csv(vns, "test/analyzer.csv")
+        # analyzer
+        self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals,
+            depth=2**20,
+            clock_domain="sys",
+            csr_csv="test/analyzer.csv")
 
 
 soc = LiteScopeSoC()
