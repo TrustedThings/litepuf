@@ -65,35 +65,21 @@ class Sampler(Module):
 
 
 class RandomLFSR(Module, AutoCSR):
-    def __init__(self, oscillators, shiftreg_init=0b1010_1100_1110_0001, taps=0b0000_0000_0010_1101, clock_domain="sys"):
+    def __init__(self, oscillators, shiftreg_init=0b0110_1011_1110_0100_1000_0101_0110_1100, taps=0b0000_0000_0000_0000_0000_0000_1100_0101, clock_domain="sys"):
         self.reset = Signal()
         self.metastable = Signal()
-        shiftreg_width = 16
+        shiftreg_width = 32
+        decimation = 1024
         self.word_o = Signal(shiftreg_width)
         self.word_ready = Signal()
         
-        bits_remaining = Signal(shiftreg_width-1)
+        bits_remaining = Signal(max=shiftreg_width*decimation)
 
         #previous_bit_ready = Signal()
 
-        self._ready = CSRStatus(reset=0)
-        self._random_word = CSRStatus(16, reset=0)
-
-        self.sync += \
-            If(self.reset | self.word_ready, # TODO: logical OR
-                bits_remaining.eq(16)
-            ), bits_remaining.eq(bits_remaining-1)#.Else(
-            #     If(~previous_bit_ready & bit_ready, # TODO: logical AND w/bit_ready
-            #         bits_remaining.eq(bits_remaining-1)
-            # )), previous_bit_rdy.eq(bit_ready)
-        self.comb += \
-            self.word_ready.eq(bits_remaining==0)
-            #words_ready.eq(~reduce(or_, bits_remaining))
-            # If(bits_remaining,
-            #     word_ready.eq(False)
-            # ).Else(
-            #     word_ready.eq(True)
-            # )
+        self._enable = CSRStorage() # TODO: turn into a CSR() and self-reset in FSM
+        self._ready = CSRStatus()
+        self._random_word = CSRStatus(32)
         
         #sampler = Sampler()
         #sampling_interval = 1024
@@ -136,3 +122,23 @@ class RandomLFSR(Module, AutoCSR):
 
         self.submodules += oscillators
         self.submodules += lfsr, # sampler, debias
+
+        fsm = FSM(reset_state="INIT")
+        fsm = ResetInserter()(fsm)
+        self.submodules += fsm
+        self.comb += fsm.reset.eq(~self._enable.storage)
+
+        fsm.act("INIT",
+            NextValue(bits_remaining, (shiftreg_width * decimation) - 1),
+            NextState("EXTRACT"),
+        )
+        fsm.act("EXTRACT",
+            NextValue(bits_remaining, bits_remaining - 1),
+            If(bits_remaining == 0,
+                NextState("READY"),
+            )
+        )
+        fsm.act("READY",
+            self.word_ready.eq(1),
+            # TODO: disable oscillators to save power
+        )
