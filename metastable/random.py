@@ -75,9 +75,7 @@ class RandomLFSR(Module, AutoCSR):
         
         bits_remaining = Signal(max=shiftreg_width*decimation)
 
-        #previous_bit_ready = Signal()
-
-        self._enable = CSRStorage() # TODO: turn into a CSR() and self-reset in FSM
+        self._update_value = CSRStorage(1)
         self._ready = CSRStatus()
         self._random_word = CSRStatus(32)
         
@@ -126,7 +124,7 @@ class RandomLFSR(Module, AutoCSR):
         fsm = FSM(reset_state="INIT")
         fsm = ResetInserter()(fsm)
         self.submodules += fsm
-        self.comb += fsm.reset.eq(~self._enable.storage)
+        self.comb += fsm.reset.eq(self._update_value.re)
 
         fsm.act("INIT",
             NextValue(bits_remaining, (shiftreg_width * decimation) - 1),
