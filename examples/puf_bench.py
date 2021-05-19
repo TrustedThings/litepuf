@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from itertools import cycle, islice, chain, count
+from more_itertools import grouper
 
 from migen import *
 from migen.genlib.io import CRG
@@ -86,30 +87,33 @@ class LiteScopeSoC(BaseSoC):
 
         oscillators1 = []
         oscillators2 = []
-        p_iter = ro_placer(8, 7)
-        for placement in p_iter:
-            oscillators1.append(RingOscillator(list(placement)))
-            oscillators2.append(RingOscillator(list(next(p_iter))))
+
+        p_iter = chain(*[
+            ro_placer(8, 7, x_start=4, y_start=11),
+            ro_placer(8, 7, x_start=7, y_start=11),
+            ro_placer(8, 7, x_start=10, y_start=11),
+            ro_placer(8, 7, x_start=13, y_start=11),
+        ])
+        for p1, p2 in grouper(p_iter, 2):
+            oscillators1.append(RingOscillator(p1))
+            oscillators2.append(RingOscillator(p2))
         self.submodules.ropuf = puf = RingOscillatorPUF((oscillators1, oscillators2))
         self.comb += puf_reset.eq(puf.reset)
 
-        # oscillators1 = []
-        # oscillators2 = []
         # p_iter = tero_placer(8, 7)
-        # for placement in p_iter:
-        #     oscillators1.append(TEROCell(list(placement)))
-        #     oscillators2.append(TEROCell(list(next(p_iter))))
+        # for p1, p2 in grouper(p_iter, 2):
+        #     oscillators1.append(TEROCell(p1))
+        #     oscillators2.append(TEROCell(p2))
         # self.submodules.teropuf = puf = TEROPUF((oscillators1, oscillators2))
         # self.comb += puf_reset.eq(puf.reset)
 
-        # oscillators1 = []
-        # oscillators2 = []
         # p_iter = ro_placer(10, 8)
-        # for placement in p_iter:
-        #     oscillators1.append(RingOscillator(list(placement)))
-        #     oscillators2.append(RingOscillator(list(next(p_iter))))
+        # for p1, p2 in grouper(p_iter, 2):
+        #     oscillators1.append(RingOscillator(p1))
+        #     oscillators2.append(RingOscillator(p2))
         # self.submodules.hybridpuf = puf = HybridOscillatorArbiterPUF((oscillators1, oscillators2))
-        # self.comb += puf_reset.eq(puf.reset)
+
+        self.comb += puf_reset.eq(puf.reset)
 
         # puf group
         analyzer_groups[0] = [
