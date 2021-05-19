@@ -24,12 +24,12 @@ analyzer.run(offset=8, length=512)  ### CHANGE THIS TO MATCH DEPTH offset=32 by 
 samples = defaultdict(list)
 for s1, s2 in product(range(5), repeat=2):
     for sample_idx in range(10): # take n samples
-        wb.regs.hybridpuf_reset.write(1) # enable reset
-        wb.regs.hybridpuf_cell0_select.write(s1)
-        wb.regs.hybridpuf_cell1_select.write(s2)
-        wb.regs.hybridpuf_reset.write(0) # disable reset
+        wb.regs.teropuf_reset.write(1) # enable reset
+        wb.regs.teropuf_cell0_select.write(s1)
+        wb.regs.teropuf_cell1_select.write(s2)
+        wb.regs.teropuf_reset.write(0) # disable reset
         time.sleep(0.1)
-        bit_value = wb.regs.hybridpuf_bit_value.read()
+        bit_value = wb.regs.teropuf_bit_value.read()
         samples[f'{s1}:{s2}'].append(bit_value)
         print(f'Comparator from set {s1} and {s2}: {bit_value}')
 
