@@ -81,7 +81,7 @@ class TrellisChain(Module):
     def __init__(self, placement):
         self.enable = Signal()
         self.chain_in = Signal()
-        self.chain_out = Signal(attr={("noglobal", 1)})
+        self.chain_out = Signal(attr={("noglobal", 1), ("keep", 1)})
         #self.chain_out.attr.add("keep") # check
 
         buffers_in = Signal(len(placement))
@@ -90,29 +90,31 @@ class TrellisChain(Module):
         self.comb += buffers_in.eq(Cat(self.chain_in, buffers_out[0:-1]))
         self.comb += self.chain_out.eq(buffers_out[-1])
 
-        bel = lambda pos: ("BEL", pos) if pos else ()
+        bel = lambda pos: ("BEL", pos) if pos else None
         chain_iter = zip(map(bel, placement), zip(buffers_in, buffers_out))
 
-        attr, (buf_in, buf_out) = next(chain_iter)
+        bel_attr, (buf_in, buf_out) = next(chain_iter)
         initializer = Instance("TRELLIS_SLICE",
                                 p_LUT0_INITVAL=0x0007, # NAND
                                 i_A0=buf_in,
                                 i_B0=self.enable,
                                 i_C0=0,
                                 i_D0=0,
-                                o_F0=buf_out,
-                                attr=[attr])
+                                o_F0=buf_out)
+        if bel_attr:
+            initializer.attr.add(bel_attr)
         self.specials += initializer
 
-        for attr, (buf_in, buf_out) in chain_iter:
+        for bel_attr, (buf_in, buf_out) in chain_iter:
             delay = Instance("TRELLIS_SLICE",
                                     p_LUT0_INITVAL=0x0002, # delay
                                     i_A0=buf_in,
                                     i_B0=0,
                                     i_C0=0,
                                     i_D0=0,
-                                    o_F0=buf_out,
-                                    attr=[attr])
+                                    o_F0=buf_out)
+            if bel_attr:
+                delay.attr.add(bel_attr)
             self.specials += delay
 
 
@@ -145,7 +147,7 @@ class MetastableOscillator(Module):
                                 i_C0=r2.ring_out,
                                 i_D0=r3.ring_out,
                                 o_F0=self.o)
-        destabilizer.attr.add("keep")
+        destabilizer.attr.add(("keep", 1))
         self.specials += destabilizer
 
 
