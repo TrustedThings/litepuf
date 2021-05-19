@@ -91,7 +91,7 @@ class PulseComparator(Module):
         self.specials += d_flipflops
 
         self.comb += [
-            self.select.eq(q0),
+            self.select.eq(q1), #q0
             self.ready.eq(q0|q1)
         ]
 
@@ -203,33 +203,40 @@ class TransientEffectRingOscillatorPUF(Module, AutoCSR):
 
 
 class PowerOptimizedHybridOscillatorArbiterPUF(Module, AutoCSR):
-    def __init__(self, enable, pads, oscillators, clock_domain="sys"):
-        self.bit_value = bit_value = Signal()
+    def __init__(self, oscillators, clock_domain="sys"):
+        self.bit_value = comparator = Signal()
+        self.reset = Signal()
 
-        self._enable = CSRStorage(reset=0)
+        self._reset = CSRStorage(reset=1)
         self._cell0_select = select0 = CSRStorage(8)
         self._cell1_select = select1 = CSRStorage(8)
         self._bit_value = CSRStatus(reset=0)
 
-        self.specials += [
-            MultiReg(self._enable.storage, enable, clock_domain),
-            MultiReg(bit_value, self._bit_value.status, clock_domain),
-        ]
-
         ro_sets = (
-            ROSet(enable, select0.storage, oscillators[0]),
-            ROSet(enable, select1.storage, oscillators[1]),
+            ROSet(oscillators[0]),
+            ROSet(oscillators[1]),
         )
-
-        d_flipflop = Instance("FD1S3AX",
-            i_D=ro_sets[0].ring_out,
-            i_CK=ro_sets[1].ring_out,
-            o_Q=bit_value)
-        self.specials += d_flipflop
+        self.comb += [
+            ro_sets[0].reset.eq(self.reset),
+            ro_sets[1].reset.eq(self.reset)
+        ]
 
         #self.submodules += ro_sets
         self.submodules.ro_set0 = ro_sets[0]
         self.submodules.ro_set1 = ro_sets[1]
+
+        self.specials += [
+            MultiReg(self._reset.storage, self.reset, clock_domain),
+            MultiReg(select0.storage, ro_sets[0].select, clock_domain),
+            MultiReg(select1.storage, ro_sets[1].select, clock_domain),
+            MultiReg(comparator, self._bit_value.status, clock_domain),
+        ]
+
+        d_flipflop = Instance("FD1S3AX",
+            i_D=ro_sets[0].ring_out,
+            i_CK=ro_sets[1].ring_out,
+            o_Q=comparator)
+        self.specials += d_flipflop
 
 
 class SpeedOptimizedHybridOscillatorArbiterPUF(Module, AutoCSR):
