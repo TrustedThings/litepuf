@@ -12,8 +12,18 @@ from .stats import steadiness, uniqueness, graycode
 
 import matplotlib.pyplot as plt
 
-    
-_get_bit = lambda n, i: n >> i & 1
+
+def chip_post_iter(dumps, offset, bit_slice=None):
+    slice_bits = lambda n: int(bin(n)[2:].zfill(16)[bit_slice], 2)
+    for chip in map(itemgetter(offset), dumps):
+        chip_item = {}
+        for challenge, responses in chip.items():
+            responses_post = [ctypes.c_uint16(r).value for r in responses]
+            responses_post = map(graycode, responses_post)
+            if bit_slice:
+                responses_post = map(slice_bits, responses_post)
+            chip_item[challenge] = list(responses_post)
+        yield chip_item
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -27,47 +37,54 @@ if __name__ == "__main__":
 
     response_dumps = []
     analyzer_dumps = []
+    voltage_dumps = []
     for filename in dump_files:
         with open(filename, 'r') as f:
             response_data = json.load(f)
         response_dumps.append(response_data['dump'])
         analyzer_dumps.append(response_data['analyzer'])
+        voltage_dumps.append(response_data['voltage'])
 
-    chip_offset_cr_list = []
+    steadiness_plot_data = defaultdict(list)
+    steadiness_err_data = defaultdict(list)
+    uniqueness_plot_data = defaultdict(list)
 
-    for chip in analyzer_dumps:
-        steadiness_plot_data = defaultdict(list)
-        offset_cr_dict = dict()
-        chip_offset_cr_list.append(offset_cr_dict)
+    #offsets = analyzer_dumps[0].keys()
+    offsets = voltage_dumps[0].keys()
 
-        for offset, cr in chip.items():
-            # challenge-responses for offset
-            offset_cr_dict[offset] = cr_dict = dict()
+    for bit_num in range(16):
+        for offset in offsets:
+            #chips = list(chip_post_iter(analyzer_dumps, offset, slice(bit_num, bit_num+1)))
+            chips = list(chip_post_iter(voltage_dumps, offset, slice(bit_num, bit_num+1)))
+            #uniqueness_ = uniqueness(chips, response_len=1)
+            uniqueness_ = 0
+            uniqueness_plot_data[bit_num].append(uniqueness_)
+            for chip in chips:
+                references = {c: mode(responses) for c, responses in chip.items()}
+                steadiness_ = list(steadiness(chip, references, response_len=1))
+                steadiness_mean = mean(steadiness_)
+                steadiness_plot_data[bit_num].append(steadiness_mean)
+                steadiness_err = steadiness_mean-min(steadiness_), max(steadiness_)-steadiness_mean
+                steadiness_err_data[bit_num].append(steadiness_err)
+                # plot steadiness for one chip
+                break
 
-            for challenge, responses in cr.items():
-                responses_gray = [ctypes.c_uint16(r).value for r in responses]
-                responses_gray = list(map(graycode, responses_gray))
-                cr_dict[challenge] = responses_gray
+    fig, (ax_steadiness, ax_uniqueness) = plt.subplots(2)
 
-            for bit_num in range(16):
-                cr_bit_dict = {c: list(map(lambda r: _get_bit(r, bit_num), responses)) for c, responses in cr_dict.items()}
-                references = {c: mode(responses) for c, responses in cr_bit_dict.items()}
-                steadiness_ = mean(steadiness(cr_bit_dict, references, response_len=1))
+    yerr = [(
+        list(map(itemgetter(0), steadiness_err_data[bit_num])),
+        list(map(itemgetter(1), steadiness_err_data[bit_num]))
+    ) for bit_num in range(16)]
+    ax_steadiness.errorbar(offsets, steadiness_plot_data[0], yerr=yerr[0], fmt='yo-') # bit 15
+    ax_steadiness.errorbar(offsets, steadiness_plot_data[11], yerr=yerr[11], fmt='o-') # bit 4
+    ax_steadiness.errorbar(offsets, steadiness_plot_data[10], yerr=yerr[10], fmt='o-') # bit 5
+    ax_steadiness.errorbar(offsets, steadiness_plot_data[9], yerr=yerr[9], fmt='o-') # bit 6
 
-                steadiness_plot_data[bit_num].append(steadiness_)
-
-        plt.plot(
-            chip.keys(), steadiness_plot_data[0], 'r--',
-            chip.keys(), steadiness_plot_data[1], 'g--',
-            chip.keys(), steadiness_plot_data[2], 'b--',
-            chip.keys(), steadiness_plot_data[13], 'r^',
-            chip.keys(), steadiness_plot_data[14], 'g^',
-            chip.keys(), steadiness_plot_data[15], 'b^',
-        )
-
-    for offset in analyzer_dumps[0]:
-        cr_dict = list(map(itemgetter(offset), chip_offset_cr_list))
-        for bit_num in range(16):
-            uniqueness_ = uniqueness(cr_dict, response_len=1)
+    ax_uniqueness.plot(
+        offsets, uniqueness_plot_data[0], 'x-',
+        offsets, uniqueness_plot_data[11], 'x-',
+        offsets, uniqueness_plot_data[10], 'x-',
+        offsets, uniqueness_plot_data[9], 'x-',
+    )
 
     plt.show()
