@@ -27,11 +27,13 @@ def uniqueness(chip_dumps, response_len=1):
                 distances.append(hamming_dist(resp1, resp2))
             yield statistics.mean(
                 [distance/response_len for distance in distances]
-            )  
+            )
 
     k_chips = len(chip_dumps)
+    if k_chips == 1:
+        return 1
     sum_permutations = sum(permute_chips(chip_dumps, response_len))
-    return 2 / (k_chips*(k_chips-1)) * sum_permutations
+    return 1 / (k_chips*(k_chips-1)) * sum_permutations
 
 # for one chip
 def steadiness(chip_dump, references, response_len=1):
@@ -66,7 +68,6 @@ class EvaluationTestCase(unittest.TestCase):
 
     def test_uniqueness(self):
         uniqueness_ = uniqueness(self.chips_cr, response_len=1)
-        print(uniqueness_)
 
     def test_steadiness(self):
         references = {
@@ -74,4 +75,3 @@ class EvaluationTestCase(unittest.TestCase):
             'challenge2': 0,
         }
         steadiness_ = steadiness(self.chips_cr[0], references, response_len=1)
-        print(list(steadiness_))
