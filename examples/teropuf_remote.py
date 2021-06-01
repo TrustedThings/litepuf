@@ -3,29 +3,13 @@ from sys import stdout
 import time
 from collections import defaultdict
 import json
-import ctypes
-from operator import sub
+from more_itertools import numeric_range
+from decimal import Decimal
 from ctypes import *
 
 from litex.tools.litex_client import RemoteClient
 from litescope.software.driver.analyzer import LiteScopeAnalyzerDriver
 from litescope.software.dump import DumpData, Dump
-
-def voltage_range(start, stop, step):
-    start = float(start)
-    # max recommended operating conditions for ECP5-5G is 1.26V
-    # absolute maximum rating is 1.32V for ECP5 and ECP5-5G
-    assert(start <= stop <= 1.32)
-
-    count = 0
-    while True:
-        step_ = round(float(start + count * step), 3)
-        if step > 0 and step_ >= stop:
-            break
-        elif step < 0 and step_ <= stop:
-            break
-        yield step_
-        count += 1
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -48,7 +32,7 @@ if args.analyzer:
     analyzer.configure_subsampler(subsampling)  ## increase this to "skip" cycles, e.g. subsample
     analyzer.configure_group(0)
 
-    analyzer_samples = defaultdict(lambda: defaultdict(list))
+    # analyzer_samples = defaultdict(lambda: defaultdict(list))
 if args.voltage:
     from dwfconstants import *
 
@@ -70,21 +54,31 @@ if args.voltage:
     # master enable
     dwf.FDwfAnalogIOEnableSet(hdwf, c_int(True))
 
-    voltage_iter = voltage_range(1.1, 1.3, 0.02)
+    time.sleep(120)
+
+    def voltage_range(start, stop, step):
+        # max recommended operating conditions for ECP5-5G is 1.26V
+        # absolute maximum rating is 1.32V for ECP5 and ECP5-5G
+        assert(start <= stop <= 1.32)
+        return numeric_range(start, stop, step)
+
+    voltage_iter = voltage_range(Decimal('1.1'), Decimal('1.31'), Decimal('0.02'))
     samples_iter = product(samples_iter, voltage_iter)
-    voltage_samples = defaultdict(lambda: defaultdict(list))
+    # voltage_samples = defaultdict(lambda: defaultdict(list))
 
 samples_iter = list(samples_iter)
 for s1, s2 in product(range(4), repeat=2):
     for sample_idx in samples_iter: # take n samples
+        sample = {'offset': None}
         if args.analyzer:
             analyzer.clear()
             analyzer.add_falling_edge_trigger("puf_reset")
             analyzer.run(offset=0, length=51)
         if args.voltage:
-            voltage = sample_idx[1]
+            voltage = float(sample_idx[1])
             if dwf.FDwfAnalogIOStatus(hdwf) == 0:
                 break
+            sample['voltage'] = voltage
             print(f'set voltage to {voltage}')
             dwf.FDwfAnalogIOChannelNodeSet(hdwf, c_int(0), c_int(1), c_double(voltage))
             time.sleep(0.3)
@@ -95,10 +89,10 @@ for s1, s2 in product(range(4), repeat=2):
         wb.regs.teropuf_reset.write(0) # disable reset
         time.sleep(0.1)
         bit_value = wb.regs.teropuf_bit_value.read()
-        two_complement = lambda x: x - 0x100000000 if x & 0x80000000 else x
+        sample['value'] = bit_value
+        print(f'Comparator from set {s1} and {s2}: {c_int16(bit_value).value}')
 
-        samples[f'{s1}:{s2}'].append(bit_value)
-        print(f'Comparator from set {s1} and {s2}: {two_complement(bit_value)}')
+        samples[f'{s1}:{s2}'].append(sample)
 
         if args.analyzer:
             analyzer.wait_done()
@@ -113,9 +107,14 @@ for s1, s2 in product(range(4), repeat=2):
             for offset, (counter1, counter2) in zip(count(0, subsampling), counter_values):
                 puf_response = counter1 - counter2
                 # index responses by offset (in clock cycles)
-                analyzer_samples[offset][f'{s1}:{s2}'].append(puf_response)
-        if args.voltage:
-            voltage_samples[voltage][f'{s1}:{s2}'].append(bit_value)
+                sample = {
+                    'offset': offset,
+                    'value': puf_response
+                }
+                samples[f'{s1}:{s2}'].append(sample)
+                #analyzer_samples[offset][f'{s1}:{s2}'].append(puf_response)
+        # if args.voltage:
+        #     voltage_samples[voltage][f'{s1}:{s2}'].append(bit_value)
 
 if args.analyzer:
     analyzer.save("test/dump.vcd")
@@ -127,8 +126,8 @@ wb.close()
 dump = {
     'ident': args.identity,
     'dump': samples,
-    'analyzer': analyzer_samples if args.analyzer else [],
-    'voltage': voltage_samples if args.voltage else [],
+    # 'analyzer': analyzer_samples if args.analyzer else [],
+    # 'voltage': voltage_samples if args.voltage else [],
 }
 
 with open(f'{args.identity or "teropuf"}_dump.json', 'w') as dumpfile:
