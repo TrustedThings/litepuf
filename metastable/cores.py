@@ -3,10 +3,12 @@
 
 from migen import *
 from migen.genlib.cdc import MultiReg
+from migen.genlib.misc import WaitTimer
 
 from litex.soc.interconnect.csr import *
 
 from .oscillator import RingOscillator, ROSet
+from . import PUFType
 
 
 class RingOscillator2(Module, AutoCSR):
@@ -125,6 +127,9 @@ class ClockGenerator(Module, AutoCSR):
 
 
 class RingOscillatorPUF(Module, AutoCSR):
+
+    puf_type = PUFType.RO
+
     def __init__(self, oscillators, clock_domain="sys"):
         self.bit_value = comparator = Signal()
         self.reset = Signal()
@@ -168,6 +173,9 @@ class RingOscillatorPUF(Module, AutoCSR):
 
 
 class TransientEffectRingOscillatorPUF(Module, AutoCSR):
+
+    puf_type = PUFType.TERO
+
     def __init__(self, cell_sets, clock_domain="sys"):
         self.bit_value = comparator = Signal(32)
         self.reset = Signal()
@@ -199,12 +207,25 @@ class TransientEffectRingOscillatorPUF(Module, AutoCSR):
 
         ro_sets[0].add_counter(32)
         ro_sets[1].add_counter(32)
-        self.comb += comparator.eq(ro_sets[0].counter - ro_sets[1].counter)
+
+        timer = WaitTimer(180) # wait 180 clock cycles at sys freq (50 Hz)
+        latch = Signal()
+        self.submodules += timer
+        self.comb += timer.wait.eq(~self.reset)
+        self.sync += [
+            latch.eq(timer.done),
+            If(timer.done & ~latch,
+                comparator.eq(ro_sets[0].counter - ro_sets[1].counter)
+            )
+        ]
 
 
 class PowerOptimizedHybridOscillatorArbiterPUF(Module, AutoCSR):
+
+    puf_type = PUFType.HYBRID
+
     def __init__(self, oscillators, clock_domain="sys"):
-        self.bit_value = comparator = Signal()
+        self.bit_value = Signal()
         self.reset = Signal()
 
         self._reset = CSRStorage(reset=1)
@@ -229,14 +250,26 @@ class PowerOptimizedHybridOscillatorArbiterPUF(Module, AutoCSR):
             MultiReg(self._reset.storage, self.reset, clock_domain),
             MultiReg(select0.storage, ro_sets[0].select, clock_domain),
             MultiReg(select1.storage, ro_sets[1].select, clock_domain),
-            MultiReg(comparator, self._bit_value.status, clock_domain),
+            MultiReg(self.bit_value, self._bit_value.status, clock_domain),
         ]
 
+        self.ff_o = Signal()
         d_flipflop = Instance("FD1S3AX",
             i_D=ro_sets[0].ring_out,
             i_CK=ro_sets[1].ring_out,
-            o_Q=comparator)
+            o_Q=self.ff_o)
         self.specials += d_flipflop
+    
+        timer = WaitTimer(180) # wait 180 clock cycles at sys freq (50 Hz)
+        latch = Signal()
+        self.submodules += timer
+        self.comb += timer.wait.eq(~self.reset)
+        self.sync += [
+            latch.eq(timer.done),
+            If(timer.done & ~latch,
+                self.bit_value.eq(self.ff_o)
+            )
+        ]
 
 
 class SpeedOptimizedHybridOscillatorArbiterPUF(Module, AutoCSR):

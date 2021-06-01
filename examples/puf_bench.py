@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 
+import argparse
+import os
+from enum import Enum, auto
+
 from itertools import cycle, islice, chain, count
+from time import monotonic
 from more_itertools import grouper
 
 from migen import *
@@ -20,6 +25,9 @@ from metastable import RingOscillator, TEROCell
 from metastable.oscillator import MetastableOscillator
 from metastable.cores import RingOscillatorPUF, TransientEffectRingOscillatorPUF as TEROPUF, PowerOptimizedHybridOscillatorArbiterPUF as HybridOscillatorArbiterPUF
 from metastable.random import RandomLFSR
+
+from metastable import PUFType
+
 
 def slicer():
     slice_iter = cycle("ABCD")
@@ -51,8 +59,8 @@ class LiteScopeSoC(BaseSoC):
     }
     csr_map.update(BaseSoC.csr_map)
 
-    def __init__(self):
-        sys_clk_freq = int(60e6) # check
+    def __init__(self, puf_type):
+        sys_clk_freq = int(50e6) # check
 
         BaseSoC.__init__(self, sys_clk_freq, x5_clk_freq=50e6, toolchain="trellis", # check
             cpu_type=None,
@@ -88,32 +96,37 @@ class LiteScopeSoC(BaseSoC):
         oscillators1 = []
         oscillators2 = []
 
-        p_iter = chain(*[
-            ro_placer(8, 7, x_start=4, y_start=11),
-            ro_placer(8, 7, x_start=7, y_start=11),
-            ro_placer(8, 7, x_start=10, y_start=11),
-            ro_placer(8, 7, x_start=13, y_start=11),
-        ])
-        for p1, p2 in grouper(p_iter, 2):
-            oscillators1.append(RingOscillator(p1))
-            oscillators2.append(RingOscillator(p2))
-        self.submodules.ropuf = puf = RingOscillatorPUF((oscillators1, oscillators2))
+        if puf_type is PUFType.RO:
+            p_iter = chain(*[
+                ro_placer(8, 7, x_start=4, y_start=11),
+                ro_placer(8, 7, x_start=7, y_start=11),
+                ro_placer(8, 7, x_start=10, y_start=11),
+                ro_placer(8, 7, x_start=13, y_start=11),
+            ])
+            for p1, p2 in grouper(p_iter, 2):
+                oscillators1.append(RingOscillator(p1))
+                oscillators2.append(RingOscillator(p2))
+            self.submodules.puf = puf = RingOscillatorPUF((oscillators1, oscillators2))
+            self.comb += puf_reset.eq(puf.reset)
+        elif puf_type is PUFType.TERO:
+            p_iter = tero_placer(8, 7)
+            for p1, p2 in grouper(p_iter, 2):
+                oscillators1.append(TEROCell(p1))
+                oscillators2.append(TEROCell(p2))
+            self.submodules.puf = puf = TEROPUF((oscillators1, oscillators2))
+            self.comb += puf_reset.eq(puf.reset)
+        elif puf_type is PUFType.HYBRID:
+            p_iter = ro_placer(10, 8)
+            for p1, p2 in grouper(p_iter, 2):
+                oscillators1.append(RingOscillator(p1))
+                oscillators2.append(RingOscillator(p2))
+            self.submodules.puf = puf = HybridOscillatorArbiterPUF((oscillators1, oscillators2))
+
         self.comb += puf_reset.eq(puf.reset)
 
-        # p_iter = tero_placer(8, 7)
-        # for p1, p2 in grouper(p_iter, 2):
-        #     oscillators1.append(TEROCell(p1))
-        #     oscillators2.append(TEROCell(p2))
-        # self.submodules.teropuf = puf = TEROPUF((oscillators1, oscillators2))
-        # self.comb += puf_reset.eq(puf.reset)
-
-        # p_iter = ro_placer(10, 8)
-        # for p1, p2 in grouper(p_iter, 2):
-        #     oscillators1.append(RingOscillator(p1))
-        #     oscillators2.append(RingOscillator(p2))
-        # self.submodules.hybridpuf = puf = HybridOscillatorArbiterPUF((oscillators1, oscillators2))
-
-        self.comb += puf_reset.eq(puf.reset)
+        # safety check for the scope sampling rate
+        monotonic = Signal(16)
+        self.sync += monotonic.eq(monotonic + 1)
 
         # puf group
         analyzer_groups[0] = [
@@ -123,6 +136,9 @@ class LiteScopeSoC(BaseSoC):
             # puf.ro_set1.counter,
             puf.ro_set0.ring_out,
             puf.ro_set1.ring_out,
+            puf.ro_set0.select,
+            puf.ro_set1.select,
+            monotonic
             # puf.pulse_comp.select,
             # puf.pulse_comp.ready
         ]
@@ -130,6 +146,11 @@ class LiteScopeSoC(BaseSoC):
            analyzer_groups[0].append(puf._cell0_select.storage) 
         if hasattr(puf, "_cell1_select"):
            analyzer_groups[0].append(puf._cell1_select.storage)
+        if puf.puf_type is PUFType.RO or puf.puf_type is PUFType.TERO:
+            analyzer_groups[0].append(puf.ro_set0.counter)
+            analyzer_groups[0].append(puf.ro_set1.counter)
+        elif puf.puf_type is PUFType.HYBRID:
+            analyzer_groups[0].append(puf.ff_o)
 
         # analyzer
         self.submodules.analyzer = LiteScopeAnalyzer(analyzer_groups,
@@ -137,6 +158,19 @@ class LiteScopeSoC(BaseSoC):
             csr_csv="test/analyzer.csv")
 
 
-soc = LiteScopeSoC()
-builder = Builder(soc, csr_csv="test/csr.csv", csr_json="test/csr.json")
-vns = builder.build(nowidelut=True, ignoreloops=True)
+def main():
+    parser = argparse.ArgumentParser(description="PUF testbench on ECP5 Evaluation Board")
+    parser.add_argument("--load",         action="store_true", help="Load bitstream")
+    parser.add_argument('--type', type=lambda t: PUFType[t], choices=list(PUFType), required=True)
+    args = parser.parse_args()
+
+    soc = LiteScopeSoC(puf_type=args.type)
+    builder = Builder(soc, csr_csv="test/csr.csv", csr_json="test/csr.json")
+    vns = builder.build(nowidelut=True, ignoreloops=True)
+
+    if args.load:
+        prog = soc.platform.create_programmer()
+        prog.load_bitstream(os.path.join(builder.gateware_dir, soc.build_name + ".svf"))
+
+if __name__ == "__main__":
+    main()
