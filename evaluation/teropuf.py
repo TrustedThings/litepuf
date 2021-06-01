@@ -14,7 +14,8 @@ from metastable.evaluation import steadiness, uniqueness, graycode
 import matplotlib.pyplot as plt
 
 
-def postprocess_response(response, bit_slice=None):
+def _response_post(response, bit_slice):
+    """Return the post-processed response."""
     # mask of response bits
     slice_bits = lambda n: int(bin(n)[2:].zfill(16)[bit_slice], 2)
     response = ctypes.c_uint16(response).value
@@ -22,6 +23,15 @@ def postprocess_response(response, bit_slice=None):
     if bit_slice:
         response = slice_bits(response)
     return response
+
+def response_gen(dump_iter, offset, offset_attr, bit_slice=None):
+    for chip_dump in dump_iter:
+        chip = dict()
+        for c, responses in chip_dump.items():
+            responses = list(filter(lambda r: offset_attr in r and r[offset_attr] == offset, responses))
+            responses = [_response_post(r['value'], bit_slice) for r in responses]
+            chip[c] = responses
+        yield chip
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -34,17 +44,13 @@ if __name__ == "__main__":
         dump_files += glob(arg)
 
     response_dumps = []
-    #analyzer_dumps = []
-    #voltage_dumps = []
     for filename in dump_files:
         with open(filename, 'r') as f:
             response_data = json.load(f)
         response_dumps.append(response_data['dump'])
-        #analyzer_dumps.append(response_data['analyzer'])
-        #voltage_dumps.append(response_data['voltage'])
 
     steadiness_plot_data = defaultdict(list)
-    steadiness_err_data = defaultdict(list)
+    steadiness_err_data  = defaultdict(list)
     uniqueness_plot_data = defaultdict(list)
 
     #offsets = analyzer_dumps[0].keys()
@@ -57,34 +63,27 @@ if __name__ == "__main__":
     #slices = [slice(bit_num, bit_num+1) for bit_num in range(16)]
 
     steadiness_plot_data = [list() for _ in range(len(slices))]
-    steadiness_err_data = [list() for _ in range(len(slices))]
+    steadiness_err_data  = [list() for _ in range(len(slices))]
     uniqueness_plot_data = [list() for _ in range(len(slices))]
 
     for slice_idx, bit_slice in enumerate(slices):
         for offset in offsets:
-            #chips = list(chip_post_iter(analyzer_dumps, offset, slice(bit_num, bit_num+1)))
-            chips = []
-            for chip_dump in response_dumps:
-                chip = dict()
-                for c, responses in chip_dump.items():
-                    responses = list(filter(lambda r: offset_dim in r and r[offset_dim] == offset, responses))
-                    #responses = [postprocess_response(r['value'], slice(bit_num, bit_num+1)) for r in responses]
-                    responses = [postprocess_response(r['value'], bit_slice) for r in responses]
-                    chip[c] = responses
-                chips.append(chip)
+            chips = list(response_gen(response_dumps, offset, offset_dim, bit_slice))
 
             uniqueness_ = uniqueness(chips, response_len=1)
             uniqueness_plot_data[slice_idx].append(uniqueness_)
 
+            steadiness_per_chip = []
             for chip in chips:
                 references = {c: mode(responses) for c, responses in chip.items()}
                 steadiness_ = list(steadiness(chip, references, response_len=1))
-                steadiness_mean = mean(steadiness_)
-                # plot steadiness for one chip
-                steadiness_plot_data[slice_idx].append(steadiness_mean)
-                steadiness_err = steadiness_mean-min(steadiness_), max(steadiness_)-steadiness_mean
-                steadiness_err_data[slice_idx].append(steadiness_err)
-                break
+                steadiness_chip = mean(steadiness_)
+                steadiness_per_chip.append(steadiness_chip)
+            # plot steadiness for one chip
+            steadiness_mean = mean(steadiness_per_chip)
+            steadiness_plot_data[slice_idx].append(steadiness_mean)
+            steadiness_err = steadiness_mean-min(steadiness_per_chip), max(steadiness_per_chip)-steadiness_mean
+            steadiness_err_data[slice_idx].append(steadiness_err)
 
     fig, (ax_steadiness, ax_uniqueness) = plt.subplots(2)
 
@@ -93,7 +92,7 @@ if __name__ == "__main__":
         list(map(itemgetter(1), steadiness_err_data[slice_idx]))
     ) for slice_idx in range(len(slices))]
 
-    ax_steadiness.errorbar(offsets, steadiness_plot_data[0], fmt='ro', linestyle='-') # bit 15
+    ax_steadiness.errorbar(offsets, steadiness_plot_data[0], yerr=yerr[0], fmt='ro', linestyle='-') # bit 15
     #ax_steadiness.errorbar(offsets, steadiness_plot_data[11], yerr=yerr[11], fmt='o-') # bit 4
     #ax_steadiness.errorbar(offsets, steadiness_plot_data[10], yerr=yerr[10], fmt='o-') # bit 5
     #ax_steadiness.errorbar(offsets, steadiness_plot_data[9], yerr=yerr[9], fmt='o-') # bit 6
