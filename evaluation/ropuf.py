@@ -18,13 +18,14 @@ def _response_post(response):
     response = ctypes.c_bool(response).value
     return response
 
-def response_gen(dump_iter, offset, offset_attr=None):
+def response_gen(dump_iter, offset_attr, offset=None):        
     for chip_dump in dump_iter:
         chip = dict()
         for c, responses in chip_dump.items():
             if offset_attr is not None:
                 responses = filter(lambda r: offset_attr in r and r[offset_attr] == offset, responses)
             else:
+                # remove all values with additional offset attribute(s)
                 responses = filter(lambda r: r.keys() <= {"value"}, responses)
             responses = [_response_post(r['value']) for r in responses]
             chip[c] = responses
@@ -33,9 +34,31 @@ def response_gen(dump_iter, offset, offset_attr=None):
 def _reference(chip):
     return {c: mode(responses) for c, responses in chip.items()}
 
+def parse_dumps(response_dumps, offset_attr, offset=None):
+    chips = list(response_gen(response_dumps, offset_attr, offset))
+
+    uniqueness_ = uniqueness(chips)
+
+    steadiness_per_chip = []
+    for chip_idx, chip in enumerate(chips):
+        if args.ref:
+            references = references_per_chip[chip_idx]
+        else:
+            references = _reference(chip)
+
+        steadiness_ = list(steadiness(chip, references))
+        steadiness_chip = mean(steadiness_)
+        steadiness_per_chip.append(steadiness_chip)
+    
+    return (
+        uniqueness_,
+        steadiness_per_chip,
+    )
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--ref', type=float)
+    parser.add_argument('--offset-key', default=None)
     parser.add_argument('dump_files', nargs='*')
 
     args = parser.parse_args()
@@ -43,6 +66,7 @@ if __name__ == "__main__":
     dump_files = list()
     for arg in args.dump_files:  
         dump_files += glob(arg)
+    print(dump_files)
 
     response_dumps = []
     for filename in dump_files:
@@ -50,12 +74,12 @@ if __name__ == "__main__":
             response_data = json.load(f)
         response_dumps.append(response_data['dump'])
 
-    #offsets = analyzer_dumps[0].keys()
-    #offset_dim = 'voltage'
-    offset_dim = 'offset'
-
-    offsets = [r[offset_dim] for r in list(response_dumps[0].values())[0] if offset_dim in r]
-    offsets = list(dict.fromkeys(offsets)) # remove duplicates and keep order (Python > 3.6) 
+    offset_attr = args.offset_key
+    if offset_attr:
+        offsets = [r[offset_attr] for r in list(response_dumps[0].values())[0] if offset_attr in r]
+        offsets = list(dict.fromkeys(offsets)) # remove duplicates and keep order (Python > 3.6) 
+    else:
+        offsets = [None,]
 
     steadiness_plot_data = []
     steadiness_err_data  = []
@@ -63,29 +87,18 @@ if __name__ == "__main__":
 
     if args.ref:
         ref_offset = args.ref
-        chips = response_gen(response_dumps, ref_offset, offset_dim)
+        chips = response_gen(response_dumps, ref_offset, offset_attr)
         references_per_chip = [_reference(chip) for chip in chips]
     for offset in offsets:
-        chips = list(response_gen(response_dumps, offset, offset_dim))
-
-        uniqueness_ = uniqueness(chips)
+        uniqueness_, steadiness_per_chip = parse_dumps(response_dumps, offset_attr, offset)
         uniqueness_plot_data.append(uniqueness_)
-
-        steadiness_per_chip = []
-        for chip_idx, chip in enumerate(chips):
-            if args.ref:
-                references = references_per_chip[chip_idx]
-            else:
-                references = _reference(chip)
-
-            steadiness_ = list(steadiness(chip, references))
-            steadiness_chip = mean(steadiness_)
-            steadiness_per_chip.append(steadiness_chip)
         # plot steadiness for one chip
         steadiness_mean = mean(steadiness_per_chip)
         steadiness_plot_data.append(steadiness_mean)
         steadiness_err = steadiness_mean-min(steadiness_per_chip), max(steadiness_per_chip)-steadiness_mean
         steadiness_err_data.append(steadiness_err)
+        print('Uniqueness:', uniqueness_)
+        print('Steadiness:', steadiness_mean, steadiness_per_chip)
 
     fig, (ax_steadiness, ax_uniqueness) = plt.subplots(2)
     ax_steadiness.title.set_text('Steadiness')
