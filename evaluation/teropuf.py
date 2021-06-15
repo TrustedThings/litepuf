@@ -13,28 +13,50 @@ from metastable.evaluation import steadiness, uniqueness, graycode
 
 import matplotlib.pyplot as plt
 
+# matplotlib.use("pgf")
+# matplotlib.rcParams.update({
+#     "pgf.texsystem": "pdflatex",
+#     'font.family': 'serif',
+#     'text.usetex': True,
+#     'pgf.rcfonts': False,
+# })
+
+def _slice_bits(n, slicer):
+    bits = bin(n)[2:].zfill(16)
+    if type(slicer) is slice:
+        bits = bits[slicer]
+    else:
+        bits = ''.join(itemgetter(*slicer)(bits))
+    return int(bits, 2)
 
 def _response_post(response, bit_slice):
     """Return the post-processed response."""
-    # mask of response bits
-    slice_bits = lambda n: int(bin(n)[2:].zfill(16)[bit_slice], 2)
     response = ctypes.c_uint16(response).value
     response = graycode(response)
     if bit_slice:
-        response = slice_bits(response)
+        response = _slice_bits(response, bit_slice)
     return response
 
-def response_gen(dump_iter, offset, offset_attr, bit_slice=None):
+def response_gen(dump_iter, offset_attr, offset=None, bit_slice=None):        
     for chip_dump in dump_iter:
         chip = dict()
         for c, responses in chip_dump.items():
-            responses = list(filter(lambda r: offset_attr in r and r[offset_attr] == offset, responses))
+            if offset_attr is not None:
+                responses = filter(lambda r: offset_attr in r and r[offset_attr] == offset, responses)
+            else:
+                # remove all values with additional offset attribute(s)
+                responses = filter(lambda r: r.keys() <= {"value"}, responses)
             responses = [_response_post(r['value'], bit_slice) for r in responses]
             chip[c] = responses
         yield chip
 
+def _reference(chip):
+    return {c: mode(responses) for c, responses in chip.items()}
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument('--ref', type=float)
+    parser.add_argument('--offset-key', default=None)
     parser.add_argument('dump_files', nargs='*')
 
     args = parser.parse_args()
@@ -49,34 +71,47 @@ if __name__ == "__main__":
             response_data = json.load(f)
         response_dumps.append(response_data['dump'])
 
-    steadiness_plot_data = defaultdict(list)
-    steadiness_err_data  = defaultdict(list)
-    uniqueness_plot_data = defaultdict(list)
+    offset_attr = args.offset_key
+    if offset_attr:
+        offsets = [r[offset_attr] for r in list(response_dumps[0].values())[0] if offset_attr in r]
+        offsets = list(dict.fromkeys(offsets)) # remove duplicates and keep order (Python > 3.6) 
+    else:
+        offsets = [None,]
 
-    #offsets = analyzer_dumps[0].keys()
-    offset_dim = 'voltage'
-
-    offsets = [r[offset_dim] for r in list(response_dumps[0].values())[0] if offset_dim in r]
-    offsets = list(dict.fromkeys(offsets)) # remove duplicates and keep order (Python > 3.6) 
-
-    slices = [None]
+    # TODO: configure slices in args
     #slices = [slice(bit_num, bit_num+1) for bit_num in range(16)]
+    #slices = [[0], [9, 10, 11]]
+    slices = [slice(0, 1), [9, 10, 11], slice(15, 16)]
 
     steadiness_plot_data = [list() for _ in range(len(slices))]
     steadiness_err_data  = [list() for _ in range(len(slices))]
     uniqueness_plot_data = [list() for _ in range(len(slices))]
 
     for slice_idx, bit_slice in enumerate(slices):
+        if args.ref:
+            ref_offset = args.ref
+            chips = response_gen(response_dumps, offset_attr, ref_offset, bit_slice)
+            references_per_chip = [_reference(chip) for chip in chips]
         for offset in offsets:
-            chips = list(response_gen(response_dumps, offset, offset_dim, bit_slice))
+            chips = list(response_gen(response_dumps, offset_attr, offset, bit_slice))
 
-            uniqueness_ = uniqueness(chips, response_len=1)
+            # get length from the slice
+            if type(bit_slice) is slice:
+                slice_len = len(range(*bit_slice.indices(16)))
+            else:
+                slice_len = len(bit_slice)
+            print(f'Slice {slice_idx} len: {slice_len}')
+            uniqueness_ = uniqueness(chips, response_len=slice_len)
             uniqueness_plot_data[slice_idx].append(uniqueness_)
 
             steadiness_per_chip = []
-            for chip in chips:
-                references = {c: mode(responses) for c, responses in chip.items()}
-                steadiness_ = list(steadiness(chip, references, response_len=1))
+            for chip_idx, chip in enumerate(chips):
+                if args.ref:
+                    references = references_per_chip[chip_idx]
+                else:
+                    references = _reference(chip)
+
+                steadiness_ = list(steadiness(chip, references, response_len=slice_len))
                 steadiness_chip = mean(steadiness_)
                 steadiness_per_chip.append(steadiness_chip)
             # plot steadiness for one chip
@@ -86,23 +121,25 @@ if __name__ == "__main__":
             steadiness_err_data[slice_idx].append(steadiness_err)
 
     fig, (ax_steadiness, ax_uniqueness) = plt.subplots(2)
+    ax_steadiness.title.set_text('Steadiness')
+    ax_uniqueness.title.set_text('Uniqueness')
+    ax_steadiness.set_ylim([0, 1])
+    ax_uniqueness.set_ylim([0, 1])
 
     yerr = [(
         list(map(itemgetter(0), steadiness_err_data[slice_idx])),
         list(map(itemgetter(1), steadiness_err_data[slice_idx]))
     ) for slice_idx in range(len(slices))]
 
-    ax_steadiness.errorbar(offsets, steadiness_plot_data[0], yerr=yerr[0], fmt='ro', linestyle='-') # bit 15
-    #ax_steadiness.errorbar(offsets, steadiness_plot_data[11], yerr=yerr[11], fmt='o-') # bit 4
-    #ax_steadiness.errorbar(offsets, steadiness_plot_data[10], yerr=yerr[10], fmt='o-') # bit 5
-    #ax_steadiness.errorbar(offsets, steadiness_plot_data[9], yerr=yerr[9], fmt='o-') # bit 6
-    #ax_steadiness.errorbar(offsets, steadiness_plot_data[15], fmt='rx-') # bit 0
+    ax_steadiness.errorbar(offsets, steadiness_plot_data[0], yerr=yerr[0], fmt='kx', linestyle='-', fillstyle='none') # bit 15
+    ax_steadiness.errorbar(offsets, steadiness_plot_data[1], yerr=yerr[1], fmt='o', linestyle='-', fillstyle='none')
+    ax_steadiness.errorbar(offsets, steadiness_plot_data[2], yerr=yerr[2], fmt='o', linestyle='-', fillstyle='none')
 
     ax_uniqueness.plot(
         offsets, uniqueness_plot_data[0], 'x-',
-        #offsets, uniqueness_plot_data[11], 'x-',
-        #offsets, uniqueness_plot_data[10], 'x-',
-        #offsets, uniqueness_plot_data[9], 'x-',
+        offsets, uniqueness_plot_data[1], 'o-',
+        offsets, uniqueness_plot_data[2], 'o-',
     )
 
     plt.show()
+    #plt.savefig('poly.pgf')
