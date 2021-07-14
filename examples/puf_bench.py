@@ -70,7 +70,7 @@ class LiteScopeSoC(BaseSoC):
         )
 
         # bridge
-        bridge = UARTWishboneBridge(self.platform.request("serial"), sys_clk_freq, baudrate=115200)
+        bridge = UARTWishboneBridge(self.platform.request("serial"), sys_clk_freq, baudrate=923076)
         self.submodules.bridge = bridge
         self.add_wb_master(bridge.wishbone)
 
@@ -81,15 +81,6 @@ class LiteScopeSoC(BaseSoC):
                 self.comb += self.platform.request("user_led", i).eq(self.io.output[i])
             except:
                 pass
-
-        # Litescope Analyzer
-        analyzer_groups = {}
-
-        # counter group
-        counter = Signal(16, name_override="counter")
-        zero = Signal(name_override="zero")
-        self.sync += counter.eq(counter + 1)
-        self.comb += zero.eq(counter == 0)
 
         puf_reset = Signal(name_override="puf_reset")
 
@@ -106,7 +97,7 @@ class LiteScopeSoC(BaseSoC):
             for p1, p2 in grouper(p_iter, 2):
                 oscillators1.append(RingOscillator(p1))
                 oscillators2.append(RingOscillator(p2))
-            self.submodules.puf = puf = RingOscillatorPUF((oscillators1, oscillators2))
+            self.submodules.puf = puf = RingOscillatorPUF((oscillators1, oscillators2), pulse_comparator=False)
             self.comb += puf_reset.eq(puf.reset)
         elif puf_type is PUFType.TERO:
             p_iter = tero_placer(8, 7)
@@ -116,7 +107,12 @@ class LiteScopeSoC(BaseSoC):
             self.submodules.puf = puf = TEROPUF((oscillators1, oscillators2))
             self.comb += puf_reset.eq(puf.reset)
         elif puf_type is PUFType.HYBRID:
-            p_iter = ro_placer(10, 8)
+            p_iter = chain(*[
+                ro_placer(8, 7, x_start=4, y_start=11),
+                ro_placer(8, 7, x_start=7, y_start=11),
+                ro_placer(8, 7, x_start=10, y_start=11),
+                ro_placer(8, 7, x_start=13, y_start=11),
+            ])
             for p1, p2 in grouper(p_iter, 2):
                 oscillators1.append(RingOscillator(p1))
                 oscillators2.append(RingOscillator(p2))
@@ -127,6 +123,9 @@ class LiteScopeSoC(BaseSoC):
         # safety check for the scope sampling rate
         monotonic = Signal(16)
         self.sync += monotonic.eq(monotonic + 1)
+
+        # Litescope Analyzer
+        analyzer_groups = {}
 
         # puf group
         analyzer_groups[0] = [
