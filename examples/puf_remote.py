@@ -20,9 +20,14 @@ parser.add_argument("--identity", default=None)
 parser.add_argument('--analyzer', action='store_true')
 parser.add_argument('--voltage', action='store_true')
 parser.add_argument('--samples', type=int, default=100)
+parser.add_argument('--analyzer-subsampling', type=int, default=10)
+parser.add_argument('--analyzer-offset', type=int, default=0)
+parser.add_argument('--analyzer-length', type=int, default=51)
+parser.add_argument('--cells', type=int, default=4, help='number of PUF cells (for challenge selection)')
 parser.add_argument('--type', type=lambda t: PUFType[t], choices=list(PUFType))
 
 args = parser.parse_args()
+
 wb = RemoteClient(csr_csv="test/csr.csv")
 wb.open()
 
@@ -31,8 +36,7 @@ samples_iter = range(args.samples)
 
 if args.analyzer:
     analyzer = LiteScopeAnalyzerDriver(wb.regs, "analyzer", debug=True, config_csv="test/analyzer.csv")
-    subsampling = 10
-    analyzer.configure_subsampler(subsampling)  ## increase this to "skip" cycles, e.g. subsample
+    analyzer.configure_subsampler(args.analyzer_subsampling)  ## increase this to "skip" cycles, e.g. subsample
     analyzer.configure_group(0)
 
 if args.voltage:
@@ -69,13 +73,13 @@ if args.voltage:
     samples_iter = product(samples_iter, voltage_iter)
 
 samples_iter = list(samples_iter)
-for s1, s2 in product(range(5), repeat=2):
+for s1, s2 in product(range(args.cells), repeat=2):
     for sample_idx in samples_iter: # take n samples
         sample = {}
         if args.analyzer:
             analyzer.clear()
             analyzer.add_falling_edge_trigger("puf_reset")
-            analyzer.run(offset=0, length=51)
+            analyzer.run(offset=args.analyzer_offset, length=args.analyzer_length)
         if args.voltage:
             voltage = float(sample_idx[1])
             if dwf.FDwfAnalogIOStatus(hdwf) == 0:
@@ -109,7 +113,7 @@ for s1, s2 in product(range(5), repeat=2):
                 signal_values = list(zip(cv1, cv2))[::2]
             elif args.type is PUFType.HYBRID:
                 signal_values = list(next(v.values for v in  analyzer_dump.variables if v.name == 'puf_ff_o'))
-            for offset, signal_value in zip(count(0, subsampling), signal_values):
+            for offset, signal_value in zip(count(0, args.analyzer_subsampling), signal_values):
                 if args.type is PUFType.RO or args.type is PUFType.TERO:
                     counter1, counter2 = signal_value
                     puf_response = counter1 - counter2
