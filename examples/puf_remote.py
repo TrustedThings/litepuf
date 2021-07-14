@@ -1,4 +1,4 @@
-from itertools import product, count
+from itertools import product, combinations, count
 from sys import stdout
 import time
 from collections import defaultdict
@@ -73,7 +73,7 @@ if args.voltage:
     samples_iter = product(samples_iter, voltage_iter)
 
 samples_iter = list(samples_iter)
-for s1, s2 in product(range(args.cells), repeat=2):
+for s1, s2 in combinations(range(args.cells), 2):
     for sample_idx in samples_iter: # take n samples
         sample = {}
         if args.analyzer:

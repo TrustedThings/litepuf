@@ -94,18 +94,18 @@ class LiteScopeSoC(BaseSoC):
                 ro_placer(8, 7, x_start=10, y_start=11),
                 ro_placer(8, 7, x_start=13, y_start=11),
             ])
-            for p1, p2 in grouper(p_iter, 2):
-                oscillators1.append(RingOscillator(p1))
-                oscillators2.append(RingOscillator(p2))
+            for p in p_iter:
+                ro = RingOscillator(p)
+                oscillators1.append(ro)
+                oscillators2.append(ro)
             self.submodules.puf = puf = RingOscillatorPUF((oscillators1, oscillators2), pulse_comparator=False)
-            self.comb += puf_reset.eq(puf.reset)
         elif puf_type is PUFType.TERO:
             p_iter = tero_placer(8, 7)
-            for p1, p2 in grouper(p_iter, 2):
-                oscillators1.append(TEROCell(p1))
-                oscillators2.append(TEROCell(p2))
+            for p in p_iter:
+                tero = TEROCell(p)
+                oscillators1.append(tero)
+                oscillators2.append(tero)
             self.submodules.puf = puf = TEROPUF((oscillators1, oscillators2))
-            self.comb += puf_reset.eq(puf.reset)
         elif puf_type is PUFType.HYBRID:
             p_iter = chain(*[
                 ro_placer(8, 7, x_start=4, y_start=11),
@@ -113,9 +113,10 @@ class LiteScopeSoC(BaseSoC):
                 ro_placer(8, 7, x_start=10, y_start=11),
                 ro_placer(8, 7, x_start=13, y_start=11),
             ])
-            for p1, p2 in grouper(p_iter, 2):
-                oscillators1.append(RingOscillator(p1))
-                oscillators2.append(RingOscillator(p2))
+            for p in p_iter:
+                ro = RingOscillator(p)
+                oscillators1.append(ro)
+                oscillators2.append(ro)
             self.submodules.puf = puf = HybridOscillatorArbiterPUF((oscillators1, oscillators2))
 
         self.comb += puf_reset.eq(puf.reset)
