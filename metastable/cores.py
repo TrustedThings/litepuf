@@ -130,7 +130,7 @@ class RingOscillatorPUF(Module, AutoCSR):
 
     puf_type = PUFType.RO
 
-    def __init__(self, oscillators, clock_domain="sys"):
+    def __init__(self, oscillators, clock_domain="sys", pulse_comparator=True):
         self.bit_value = comparator = Signal()
         self.reset = Signal()
 
@@ -161,15 +161,26 @@ class RingOscillatorPUF(Module, AutoCSR):
 
         ro_sets[0].add_counter(20)
         ro_sets[1].add_counter(20)
-        #self.comb += comparator.eq(ro_sets[0].counter < ro_sets[1].counter)
 
-        self.submodules.pulse_comp = PulseComparator()
-        self.comb += [
-            self.pulse_comp.reset.eq(self.reset),
-            self.pulse_comp.pulse0.eq(ro_sets[0].counter[-1]),
-            self.pulse_comp.pulse1.eq(ro_sets[1].counter[-1])
-        ]
-        self.comb += comparator.eq(self.pulse_comp.select)
+        if pulse_comparator:
+            self.submodules.pulse_comp = PulseComparator()
+            self.comb += [
+                self.pulse_comp.reset.eq(self.reset),
+                self.pulse_comp.pulse0.eq(ro_sets[0].counter[-1]),
+                self.pulse_comp.pulse1.eq(ro_sets[1].counter[-1])
+            ]
+            self.comb += comparator.eq(self.pulse_comp.select)
+        else:
+            timer = WaitTimer(8) # wait 8 clock cycles at sys freq (50 Hz)
+            latch = Signal()
+            self.submodules += timer
+            self.comb += timer.wait.eq(~self.reset)
+            self.sync += [
+                latch.eq(timer.done),
+                If(timer.done & ~latch,
+                    comparator.eq(ro_sets[0].counter - ro_sets[1].counter)
+                )
+            ]
 
 
 class TransientEffectRingOscillatorPUF(Module, AutoCSR):

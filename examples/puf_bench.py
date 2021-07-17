@@ -4,8 +4,8 @@ import argparse
 import os
 from enum import Enum, auto
 
-from itertools import cycle, islice, chain, count
-from time import monotonic
+from itertools import cycle, islice, chain, count, repeat
+from time import sleep
 from more_itertools import grouper
 
 from migen import *
@@ -35,18 +35,20 @@ def slicer():
         for _ in range(4):
             yield (i, next(slice_iter))
 
-def ro_placer(num_chains, chain_length, x_start=4, y_start=11):
+def ro_placer(num_chains, chain_length, x_start=32, y_start=11):
     for chain in range(num_chains):
         placement = [f"X{x_start+column}/Y{y_start+chain}/SLICE{slice_id}" for column, slice_id in islice(slicer(), chain_length)]
         print(placement)
         yield placement
 
-def tero_placer(num_cells, chain_length):
+def tero_placer(num_cells, chain_length, x_start=32, y_start=11):
     for cell in range(num_cells):
-        yield (
-            [f"X{2+column}/Y{2+cell}/SLICE{slice_id}" for column, slice_id in islice(slicer(), chain_length)],
-            [f"X{4+column}/Y{2+cell}/SLICE{slice_id}" for column, slice_id in islice(slicer(), chain_length)],
+        placement = (
+            [f"X{x_start+column}/Y{y_start+cell}/SLICE{slice_id}" for column, slice_id in islice(slicer(), chain_length)],
+            [f"X{x_start+2+column}/Y{y_start+cell}/SLICE{slice_id}" for column, slice_id in islice(slicer(), chain_length)],
         )
+        print(placement)
+        yield placement
 
 
 class LiteScopeSoC(BaseSoC):
@@ -59,7 +61,7 @@ class LiteScopeSoC(BaseSoC):
     }
     csr_map.update(BaseSoC.csr_map)
 
-    def __init__(self, puf_type):
+    def __init__(self, puf_type, group_cells=False):
         sys_clk_freq = int(50e6) # check
 
         BaseSoC.__init__(self, sys_clk_freq, x5_clk_freq=50e6, toolchain="trellis", # check
@@ -89,10 +91,19 @@ class LiteScopeSoC(BaseSoC):
 
         if puf_type is PUFType.RO:
             p_iter = chain(*[
-                ro_placer(8, 7, x_start=4, y_start=11),
-                ro_placer(8, 7, x_start=7, y_start=11),
-                ro_placer(8, 7, x_start=10, y_start=11),
-                ro_placer(8, 7, x_start=13, y_start=11),
+                ro_placer(8, 7, x_start=32, y_start=11),
+                ro_placer(8, 7, x_start=34, y_start=11),
+                ro_placer(8, 7, x_start=36, y_start=11),
+                ro_placer(8, 7, x_start=38, y_start=11),
+                ro_placer(8, 7, x_start=40, y_start=11),
+                ro_placer(8, 7, x_start=42, y_start=11),
+                ro_placer(8, 7, x_start=44, y_start=11),
+                ro_placer(8, 7, x_start=46, y_start=11),
+                ro_placer(8, 7, x_start=48, y_start=11),
+                ro_placer(8, 7, x_start=50, y_start=11),
+                ro_placer(8, 7, x_start=52, y_start=11),
+                ro_placer(8, 7, x_start=54, y_start=11),
+                # ro_placer(8, 7, x_start=56, y_start=11),
             ])
             for p in p_iter:
                 ro = RingOscillator(p)
@@ -100,7 +111,20 @@ class LiteScopeSoC(BaseSoC):
                 oscillators2.append(ro)
             self.submodules.puf = puf = RingOscillatorPUF((oscillators1, oscillators2), pulse_comparator=False)
         elif puf_type is PUFType.TERO:
-            p_iter = tero_placer(8, 7)
+            p_iter = chain(*[
+                tero_placer(8, 7, x_start=32, y_start=11),
+                tero_placer(8, 7, x_start=36, y_start=11),
+                tero_placer(8, 7, x_start=40, y_start=11),
+                tero_placer(8, 7, x_start=44, y_start=11),
+                tero_placer(8, 7, x_start=48, y_start=11),
+                tero_placer(8, 7, x_start=52, y_start=11),
+                tero_placer(8, 7, x_start=32, y_start=23),
+                tero_placer(8, 7, x_start=36, y_start=23),
+                tero_placer(8, 7, x_start=40, y_start=23),
+                tero_placer(8, 7, x_start=44, y_start=23),
+                tero_placer(8, 7, x_start=48, y_start=23),
+                tero_placer(8, 7, x_start=52, y_start=23),
+            ])
             for p in p_iter:
                 tero = TEROCell(p)
                 oscillators1.append(tero)
@@ -108,10 +132,19 @@ class LiteScopeSoC(BaseSoC):
             self.submodules.puf = puf = TEROPUF((oscillators1, oscillators2))
         elif puf_type is PUFType.HYBRID:
             p_iter = chain(*[
-                ro_placer(8, 7, x_start=4, y_start=11),
-                ro_placer(8, 7, x_start=7, y_start=11),
-                ro_placer(8, 7, x_start=10, y_start=11),
-                ro_placer(8, 7, x_start=13, y_start=11),
+                ro_placer(8, 7, x_start=32, y_start=11),
+                ro_placer(8, 7, x_start=34, y_start=11),
+                ro_placer(8, 7, x_start=36, y_start=11),
+                ro_placer(8, 7, x_start=38, y_start=11),
+                ro_placer(8, 7, x_start=40, y_start=11),
+                ro_placer(8, 7, x_start=42, y_start=11),
+                ro_placer(8, 7, x_start=44, y_start=11),
+                ro_placer(8, 7, x_start=46, y_start=11),
+                ro_placer(8, 7, x_start=48, y_start=11),
+                ro_placer(8, 7, x_start=50, y_start=11),
+                ro_placer(8, 7, x_start=52, y_start=11),
+                ro_placer(8, 7, x_start=54, y_start=11),
+                # ro_placer(8, 7, x_start=56, y_start=11),
             ])
             for p in p_iter:
                 ro = RingOscillator(p)
@@ -162,9 +195,10 @@ def main():
     parser = argparse.ArgumentParser(description="PUF testbench on ECP5 Evaluation Board")
     parser.add_argument("--load",         action="store_true", help="Load bitstream")
     parser.add_argument('--type', type=lambda t: PUFType[t], choices=list(PUFType), required=True)
+    parser.add_argument('--group-cells', action='store_true', help='divide PUF cells into two sets')
     args = parser.parse_args()
 
-    soc = LiteScopeSoC(puf_type=args.type)
+    soc = LiteScopeSoC(puf_type=args.type, group_cells=bool(args.group_cells))
     builder = Builder(soc, csr_csv="test/csr.csv", csr_json="test/csr.json")
     vns = builder.build(nowidelut=True, ignoreloops=True)
 
