@@ -15,8 +15,8 @@ import matplotlib.pyplot as plt
 #     'pgf.rcfonts': False,
 # })
 
-oscillator_counts = [2, 4, 8, 16]
-inverter_counts = [3, 5, 7, 9]
+oscillator_counts = [2, 4, 6, 8, 10]
+inverter_counts = [3, 5, 7, 9, 11]
 
 min_entropy = np.empty(shape=(len(oscillator_counts), len(inverter_counts)))
 
