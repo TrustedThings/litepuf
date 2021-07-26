@@ -171,7 +171,7 @@ class RingOscillatorPUF(Module, AutoCSR):
             ]
             self.comb += comparator.eq(self.pulse_comp.select)
         else:
-            timer = WaitTimer(8) # wait 8 clock cycles at sys freq (50 Hz)
+            timer = WaitTimer(100) # wait 100 clock cycles at sys freq (50 Hz)
             latch = Signal()
             self.submodules += timer
             self.comb += timer.wait.eq(~self.reset)
@@ -219,7 +219,7 @@ class TransientEffectRingOscillatorPUF(Module, AutoCSR):
         ro_sets[0].add_counter(32)
         ro_sets[1].add_counter(32)
 
-        timer = WaitTimer(180) # wait 180 clock cycles at sys freq (50 Hz)
+        timer = WaitTimer(30) # wait 30 clock cycles at sys freq (50 Hz)
         latch = Signal()
         self.submodules += timer
         self.comb += timer.wait.eq(~self.reset)
@@ -271,7 +271,7 @@ class PowerOptimizedHybridOscillatorArbiterPUF(Module, AutoCSR):
             o_Q=self.ff_o)
         self.specials += d_flipflop
     
-        timer = WaitTimer(180) # wait 180 clock cycles at sys freq (50 Hz)
+        timer = WaitTimer(10) # wait 10 clock cycles at sys freq (50 Hz)
         latch = Signal()
         self.submodules += timer
         self.comb += timer.wait.eq(~self.reset)
