@@ -109,10 +109,11 @@ for s1, s2 in combinations(range(args.cells), 2):
             if args.type is PUFType.RO or args.type is PUFType.TERO:
                 cv1 = next(v.values for v in  analyzer_dump.variables if v.name == 'puf_roset0_counter')
                 cv2 = next(v.values for v in  analyzer_dump.variables if v.name == 'puf_roset1_counter')
-                # each clock cycles has two values (rising, falling), skip every other value
-                signal_values = list(zip(cv1, cv2))[::2]
+                signal_values = list(zip(cv1, cv2))
             elif args.type is PUFType.HYBRID:
                 signal_values = list(next(v.values for v in  analyzer_dump.variables if v.name == 'puf_ff_o'))
+            # each clock cycles has two values (rising, falling), skip every other value
+            signal_values = signal_values[::2]
             for offset, signal_value in zip(count(0, args.analyzer_subsampling), signal_values):
                 if args.type is PUFType.RO or args.type is PUFType.TERO:
                     counter1, counter2 = signal_value
