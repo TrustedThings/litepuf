@@ -1,6 +1,7 @@
 from itertools import permutations, starmap
 from functools import lru_cache
 import argparse
+from pathlib import Path
 from glob import glob
 import json
 from statistics import mode, mean
@@ -10,6 +11,7 @@ import ctypes
 
 from metastable.evaluation import steadiness, uniqueness, graycode
 
+import matplotlib
 import matplotlib.pyplot as plt
 
 
@@ -61,9 +63,22 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--ref', type=float, help='reference offset for steadiness (sliding by default)')
     parser.add_argument('--offset-key', default=None)
+    parser.add_argument('--export-path', default=None, help='export path of plot figure')
     parser.add_argument('dump_files', nargs='*')
 
     args = parser.parse_args()
+
+    if args.export_path:
+        path = Path(args.export_path)
+        if path.suffix != '.pgf':
+            raise ValueError('only pgf export is supported')
+        matplotlib.use("pgf")
+        matplotlib.rcParams.update({
+            "pgf.texsystem": "pdflatex",
+            'font.family': 'serif',
+            'text.usetex': True,
+            'pgf.rcfonts': False,
+        })
 
     dump_files = list()
     for arg in args.dump_files:  
@@ -119,4 +134,9 @@ if __name__ == "__main__":
         offsets, uniqueness_plot_data, 'x-',
     )
 
-    plt.show()
+    if args.export_path:
+        plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
+        plt.margins(0, 0)
+        plt.savefig(args.export_path, bbox_inches='tight', pad_inches=0)
+    else:
+        plt.show()
