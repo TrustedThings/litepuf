@@ -15,7 +15,9 @@ import matplotlib.pyplot as plt
 
 def _response_post(response):
     """Return the post-processed response."""
-    response = ctypes.c_bool(response).value
+    # response = ctypes.c_bool(response).value
+    # workaround, the ROPUF sampler return counter values instead of boolean
+    response = ctypes.c_int16(response).value > 0
     return response
 
 def response_gen(dump_iter, offset_attr, offset=None):        
