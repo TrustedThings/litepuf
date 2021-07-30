@@ -55,7 +55,7 @@ def _reference(chip):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--ref', type=float)
+    parser.add_argument('--ref', type=float, help='reference offset for steadiness (sliding by default)')
     parser.add_argument('--offset-key', default=None)
     parser.add_argument('dump_files', nargs='*')
 

@@ -59,7 +59,7 @@ def parse_dumps(response_dumps, offset_attr, offset=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--ref', type=float)
+    parser.add_argument('--ref', type=float, help='reference offset for steadiness (sliding by default)')
     parser.add_argument('--offset-key', default=None)
     parser.add_argument('dump_files', nargs='*')
 
@@ -89,7 +89,7 @@ if __name__ == "__main__":
 
     if args.ref:
         ref_offset = args.ref
-        chips = response_gen(response_dumps, ref_offset, offset_attr)
+        chips = response_gen(response_dumps, offset_attr, ref_offset)
         references_per_chip = [_reference(chip) for chip in chips]
     for offset in offsets:
         uniqueness_, steadiness_per_chip = parse_dumps(response_dumps, offset_attr, offset)
