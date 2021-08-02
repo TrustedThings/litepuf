@@ -66,7 +66,6 @@ for i in range(len(oscillator_counts)):
         text = ax.text(j, i, min_entropy[i, j],
                        ha="center", va="center", color=color)
 
-ax.set_title("Harvest of local farmers (in tons/year)")
 fig.tight_layout()
 plt.show()
 #plt.savefig('heatmap.pgf')
