@@ -22,7 +22,7 @@ min_entropy = np.empty(shape=(len(oscillator_counts), len(inverter_counts)))
 
 for osc_idx, osc_count in enumerate(oscillator_counts):
     for inv_idx, inv_count in enumerate(inverter_counts):
-        dump = import_module(f'dump_metastable_{osc_count}_{inv_count}')
+        dump = import_module(f'dump_weak_{osc_count}_{inv_count}')
 
         metastable = dump.dump["soc_trng_metastable"]
 
