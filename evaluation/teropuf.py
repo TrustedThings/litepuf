@@ -1,13 +1,11 @@
-from itertools import permutations
-from functools import lru_cache
 import argparse
 from pathlib import Path
 from glob import glob
 import json
 from statistics import mode, mean
-from operator import sub, itemgetter
-from collections import defaultdict
+from operator import itemgetter
 import ctypes
+from cycler import cycler
 
 from metastable.evaluation import steadiness, uniqueness, graycode
 
@@ -52,10 +50,12 @@ if __name__ == "__main__":
     parser.add_argument('--ref', type=float, help='reference offset for steadiness (sliding by default)')
     parser.add_argument('--offset-key', default=None)
     parser.add_argument('--export-path', default=None, help='export path of plot figure')
+    parser.add_argument('--yerr', action='store_true', default=False)
     parser.add_argument('dump_files', nargs='*')
 
     args = parser.parse_args()
 
+    matplotlib.rcParams['axes.prop_cycle'] = cycler(color='rbgcmyk') # default color='bgrcmyk
     if args.export_path:
         path = Path(args.export_path)
         if path.suffix != '.pgf':
@@ -88,7 +88,7 @@ if __name__ == "__main__":
     # TODO: configure slices in args
     #slices = [slice(bit_num, bit_num+1) for bit_num in range(16)]
     #slices = [[0], [9, 10, 11]]
-    slices = [slice(0, 1), [9, 10, 11], slice(15, 16)]
+    slices = [[0], [15], [14], [13], [12], [11]]
 
     steadiness_plot_data = [list() for _ in range(len(slices))]
     steadiness_err_data  = [list() for _ in range(len(slices))]
@@ -126,31 +126,48 @@ if __name__ == "__main__":
             steadiness_plot_data[slice_idx].append(steadiness_mean)
             steadiness_err = steadiness_mean-min(steadiness_per_chip), max(steadiness_per_chip)-steadiness_mean
             steadiness_err_data[slice_idx].append(steadiness_err)
+            print('Uniqueness:', uniqueness_)
+            print('Steadiness:', steadiness_mean, steadiness_per_chip)
 
-    fig, (ax_steadiness, ax_uniqueness) = plt.subplots(2)
-    ax_steadiness.title.set_text('Steadiness')
-    ax_uniqueness.title.set_text('Uniqueness')
-    ax_steadiness.set_ylim([0, 1])
-    ax_uniqueness.set_ylim([0, 1])
+    fig, (ax_uniqueness, ax_steadiness) = plt.subplots(2)
+    fig.tight_layout(pad=3.0)
+    fig.set_figheight(6)
+    fig.set_figwidth(7)
 
-    yerr = [(
-        list(map(itemgetter(0), steadiness_err_data[slice_idx])),
-        list(map(itemgetter(1), steadiness_err_data[slice_idx]))
-    ) for slice_idx in range(len(slices))]
+    ax_steadiness.set(xlabel='Acquisition time in clock cycles (50 Mhz)', ylabel='Steadiness',
+            title=None)
+    ax_uniqueness.set(xlabel='Acquisition time in clock cycles (50 Mhz)', ylabel='Uniqueness')
+    ax_steadiness.set_ylim([0.5, 1])
+    ax_steadiness.margins(x=0.02)
+    ax_uniqueness.set_ylim([0, 0.6])
+    ax_uniqueness.margins(x=0.02)
 
-    ax_steadiness.errorbar(offsets, steadiness_plot_data[0], yerr=yerr[0], fmt='kx', linestyle='-', fillstyle='none') # bit 15
-    ax_steadiness.errorbar(offsets, steadiness_plot_data[1], yerr=yerr[1], fmt='o', linestyle='-', fillstyle='none')
-    ax_steadiness.errorbar(offsets, steadiness_plot_data[2], yerr=yerr[2], fmt='o', linestyle='-', fillstyle='none')
+    if args.yerr:
+        yerr = [(
+            list(map(itemgetter(0), steadiness_err_data[slice_idx])),
+            list(map(itemgetter(1), steadiness_err_data[slice_idx]))
+        ) for slice_idx in range(len(slices))]
+    else:
+        yerr = [None] * len(slices)
 
-    ax_uniqueness.plot(
-        offsets, uniqueness_plot_data[0], 'x-',
-        offsets, uniqueness_plot_data[1], 'o-',
-        offsets, uniqueness_plot_data[2], 'o-',
-    )
+    ax_steadiness.errorbar(offsets, steadiness_plot_data[0], yerr=yerr[0], fmt='o-', markersize=3, markeredgewidth=1, label='bit 15')
+    ax_steadiness.errorbar(offsets, steadiness_plot_data[1], yerr=yerr[1], fmt='o-', markersize=3, markeredgewidth=1, label='bit 0')
+    ax_steadiness.errorbar(offsets, steadiness_plot_data[2], yerr=yerr[2], fmt='o-', markersize=3, markeredgewidth=1, label='bit 1')
+    ax_steadiness.errorbar(offsets, steadiness_plot_data[3], yerr=yerr[3], fmt='o-', markersize=3, markeredgewidth=1, label='bit 2')
+    ax_steadiness.errorbar(offsets, steadiness_plot_data[4], yerr=yerr[4], fmt='o-', markersize=3, markeredgewidth=1, label='bit 3')
+    ax_steadiness.errorbar(offsets, steadiness_plot_data[5], yerr=yerr[5], fmt='o-', markersize=3, markeredgewidth=1, label='bit 4')
+
+    ax_uniqueness.plot(offsets, uniqueness_plot_data[0], 'o-', markersize=3, markeredgewidth=1)
+    ax_uniqueness.plot(offsets, uniqueness_plot_data[1], 'o-', markersize=3, markeredgewidth=1)
+    ax_uniqueness.plot(offsets, uniqueness_plot_data[2], 'o-', markersize=3, markeredgewidth=1)
+    ax_uniqueness.plot(offsets, uniqueness_plot_data[3], 'o-', markersize=3, markeredgewidth=1)
+    ax_uniqueness.plot(offsets, uniqueness_plot_data[4], 'o-', markersize=3, markeredgewidth=1)
+    ax_uniqueness.plot(offsets, uniqueness_plot_data[5], 'o-', markersize=3, markeredgewidth=1)
+
+    fig.legend(loc="lower right", bbox_to_anchor=(1,0), bbox_transform=ax_uniqueness.transAxes, ncol=2)
 
     if args.export_path:
-        plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
-        plt.margins(0, 0)
+        # plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
         plt.savefig(args.export_path, bbox_inches='tight', pad_inches=0)
     else:
         plt.show()

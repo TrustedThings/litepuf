@@ -1,18 +1,16 @@
-from itertools import permutations, starmap
-from functools import lru_cache
 import argparse
 from pathlib import Path
 from glob import glob
 import json
 from statistics import mode, mean
-from operator import sub, itemgetter
-from collections import defaultdict
+from operator import itemgetter
 import ctypes
 
 from metastable.evaluation import steadiness, uniqueness, graycode
 
 import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 
 
 def _response_post(response):
@@ -64,6 +62,7 @@ if __name__ == "__main__":
     parser.add_argument('--ref', type=float, help='reference offset for steadiness (sliding by default)')
     parser.add_argument('--offset-key', default=None)
     parser.add_argument('--export-path', default=None, help='export path of plot figure')
+    parser.add_argument('--yerr', action='store_true', default=False)
     parser.add_argument('dump_files', nargs='*')
 
     args = parser.parse_args()
@@ -117,26 +116,38 @@ if __name__ == "__main__":
         print('Uniqueness:', uniqueness_)
         print('Steadiness:', steadiness_mean, steadiness_per_chip)
 
-    fig, (ax_steadiness, ax_uniqueness) = plt.subplots(2)
-    ax_steadiness.title.set_text('Steadiness')
-    ax_uniqueness.title.set_text('Uniqueness')
-    ax_steadiness.set_ylim([0, 1])
-    ax_uniqueness.set_ylim([0, 1])
+    fig, (ax_uniqueness, ax_steadiness) = plt.subplots(2)
+    fig.tight_layout(pad=3.0)
+    fig.set_figheight(5)
+    fig.set_figwidth(7)
 
-    yerr = (
-        list(map(itemgetter(0), steadiness_err_data)),
-        list(map(itemgetter(1), steadiness_err_data))
+    ax_steadiness.set(xlabel='Acquisition time in clock cycles (50 Mhz)', ylabel='Steadiness',
+            title=None)
+    ax_uniqueness.set(xlabel='Acquisition time in clock cycles (50 Mhz)', ylabel='Uniqueness')
+    ax_steadiness.set_ylim([0.5, 1])
+    ax_steadiness.margins(x=0.02)
+    ax_uniqueness.set_ylim([0, 0.6])
+    ax_uniqueness.margins(x=0.02)
+    ax_uniqueness.yaxis.set_major_locator(ticker.MultipleLocator(0.1))
+
+    if args.yerr:
+        yerr = (
+            list(map(itemgetter(0), steadiness_err_data)),
+            list(map(itemgetter(1), steadiness_err_data))
+        )
+    else:
+        yerr = None
+
+    ax_steadiness.errorbar(
+        offsets, steadiness_plot_data, yerr=yerr, fmt='o-', markersize=3, markeredgewidth=1
     )
 
-    ax_steadiness.errorbar(offsets, steadiness_plot_data, yerr=yerr, fmt='ko', linestyle='-', fillstyle='none')
-
     ax_uniqueness.plot(
-        offsets, uniqueness_plot_data, 'x-',
+        offsets, uniqueness_plot_data, 'o-', markersize=3, markeredgewidth=1
     )
 
     if args.export_path:
-        plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
-        plt.margins(0, 0)
+        # plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
         plt.savefig(args.export_path, bbox_inches='tight', pad_inches=0)
     else:
         plt.show()
