@@ -219,7 +219,7 @@ class TransientEffectRingOscillatorPUF(Module, AutoCSR):
         ro_sets[0].add_counter(32)
         ro_sets[1].add_counter(32)
 
-        timer = WaitTimer(30) # wait 30 clock cycles at sys freq (50 Hz)
+        timer = WaitTimer(16) # wait 16 clock cycles at sys freq (50 Hz)
         latch = Signal()
         self.submodules += timer
         self.comb += timer.wait.eq(~self.reset)
