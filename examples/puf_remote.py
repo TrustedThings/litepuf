@@ -45,6 +45,7 @@ if args.voltage:
     dwf = cdll.LoadLibrary("libdwf.so")
     hdwf = c_int()
 
+    dwf.FDwfParamSet(DwfParamOnClose, c_int(0)) # 0 = run, 1 = stop, 2 = shutdown
     print("Opening first device")
     dwf.FDwfDeviceOpen(c_int(-1), byref(hdwf))
 
@@ -52,6 +53,7 @@ if args.voltage:
         print("failed to open device")
         quit()
 
+    dwf.FDwfDeviceAutoConfigureSet(hdwf, c_int(0))
     # set up analog IO channel nodes
     # enable positive supply
     dwf.FDwfAnalogIOChannelNodeSet(hdwf, c_int(0), c_int(0), c_double(True))
@@ -59,9 +61,7 @@ if args.voltage:
     dwf.FDwfAnalogIOChannelNodeSet(hdwf, c_int(0), c_int(1), c_double(1.15))
     # master enable
     dwf.FDwfAnalogIOEnableSet(hdwf, c_int(True))
-
-    if True:
-        time.sleep(120)
+    dwf.FDwfAnalogIOConfigure(hdwf)
 
     def voltage_range(start, stop, step):
         # max recommended operating conditions for ECP5-5G is 1.26V
@@ -87,6 +87,7 @@ for s1, s2 in combinations(range(args.cells), 2):
             sample['voltage'] = voltage
             print(f'set voltage to {voltage}')
             dwf.FDwfAnalogIOChannelNodeSet(hdwf, c_int(0), c_int(1), c_double(voltage))
+            dwf.FDwfAnalogIOConfigure(hdwf)
             time.sleep(0.3)
 
         wb.regs.puf_reset.write(1) # enable reset
