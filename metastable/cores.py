@@ -171,7 +171,7 @@ class RingOscillatorPUF(Module, AutoCSR):
             ]
             self.comb += comparator.eq(self.pulse_comp.select)
         else:
-            timer = WaitTimer(100) # wait 100 clock cycles at sys freq (50 Hz)
+            timer = WaitTimer(40) # wait 40 clock cycles at sys freq (50 Hz)
             latch = Signal()
             self.submodules += timer
             self.comb += timer.wait.eq(~self.reset)
