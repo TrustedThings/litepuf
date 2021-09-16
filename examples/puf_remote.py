@@ -57,8 +57,8 @@ if args.voltage:
     # set up analog IO channel nodes
     # enable positive supply
     dwf.FDwfAnalogIOChannelNodeSet(hdwf, c_int(0), c_int(0), c_double(True))
-    # set voltage to 1.15 V
-    dwf.FDwfAnalogIOChannelNodeSet(hdwf, c_int(0), c_int(1), c_double(1.15))
+    # set voltage to 1.20 V
+    dwf.FDwfAnalogIOChannelNodeSet(hdwf, c_int(0), c_int(1), c_double(1.20))
     # master enable
     dwf.FDwfAnalogIOEnableSet(hdwf, c_int(True))
     dwf.FDwfAnalogIOConfigure(hdwf)
@@ -73,22 +73,23 @@ if args.voltage:
     samples_iter = product(samples_iter, voltage_iter)
 
 samples_iter = list(samples_iter)
-for s1, s2 in combinations(range(args.cells), 2):
-    for sample_idx in samples_iter: # take n samples
+for sample_idx in samples_iter: # take n samples
+    if args.voltage:
+        voltage = float(sample_idx[1])
+        if dwf.FDwfAnalogIOStatus(hdwf) == 0:
+            break
+        print(f'set voltage to {voltage}')
+        dwf.FDwfAnalogIOChannelNodeSet(hdwf, c_int(0), c_int(1), c_double(voltage))
+        dwf.FDwfAnalogIOConfigure(hdwf)
+        time.sleep(0.5)
+    for s1, s2 in combinations(range(args.cells), 2):
         sample = {}
+        if args.voltage:
+            sample['voltage'] = voltage
         if args.analyzer:
             analyzer.clear()
             analyzer.add_falling_edge_trigger("puf_reset")
             analyzer.run(offset=args.analyzer_offset, length=args.analyzer_length)
-        if args.voltage:
-            voltage = float(sample_idx[1])
-            if dwf.FDwfAnalogIOStatus(hdwf) == 0:
-                break
-            sample['voltage'] = voltage
-            print(f'set voltage to {voltage}')
-            dwf.FDwfAnalogIOChannelNodeSet(hdwf, c_int(0), c_int(1), c_double(voltage))
-            dwf.FDwfAnalogIOConfigure(hdwf)
-            time.sleep(0.3)
 
         wb.regs.puf_reset.write(1) # enable reset
         wb.regs.puf_cell0_select.write(s1)
