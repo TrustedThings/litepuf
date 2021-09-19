@@ -7,7 +7,7 @@ from operator import itemgetter
 import ctypes
 from cycler import cycler
 
-from metastable.evaluation import steadiness, uniqueness, graycode
+from metastable.evaluation import steadiness, uniqueness, randomness, graycode
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -87,8 +87,7 @@ if __name__ == "__main__":
 
     # TODO: configure slices in args
     #slices = [slice(bit_num, bit_num+1) for bit_num in range(16)]
-    #slices = [[0], [9, 10, 11]]
-    slices = [[0], [15], [14], [13], [12], [11]]
+    slices = [[0], [15], [14], [0, 15], [0, 15, 14]]
 
     steadiness_plot_data = [list() for _ in range(len(slices))]
     steadiness_err_data  = [list() for _ in range(len(slices))]
@@ -126,17 +125,34 @@ if __name__ == "__main__":
             steadiness_plot_data[slice_idx].append(steadiness_mean)
             steadiness_err = steadiness_mean-min(steadiness_per_chip), max(steadiness_per_chip)-steadiness_mean
             steadiness_err_data[slice_idx].append(steadiness_err)
+
+            randomness_ = randomness(chips, response_len=slice_len)
+
             print('Uniqueness:', uniqueness_)
             print('Steadiness:', steadiness_mean, steadiness_per_chip)
+            print('Randomness:', randomness_)
 
     fig, (ax_uniqueness, ax_steadiness) = plt.subplots(2)
-    fig.tight_layout(pad=3.0)
-    fig.set_figheight(6)
+    if args.offset_key == 'voltage':
+        fig, ax_steadiness = plt.subplots()
+        fig.set_figheight(3)
+    else:
+        fig.set_figheight(6)
+        fig.legend(loc="lower right", ncol=2, bbox_to_anchor=(1,0), bbox_transform=ax_uniqueness.transAxes)
     fig.set_figwidth(7)
+    fig.tight_layout(pad=3.0)
 
-    ax_steadiness.set(xlabel='Acquisition time in clock cycles (50 Mhz)', ylabel='Steadiness',
+    ax_steadiness.grid(linestyle='dotted')
+    ax_uniqueness.grid(linestyle='dotted')
+
+    xlabels = {
+        'offset': 'Acquisition time in clock cycles (50 Mhz)',
+        'voltage': 'Voltage (V)'
+    }
+    xlabel = xlabels.get(args.offset_key)
+    ax_steadiness.set(xlabel=xlabel, ylabel='Steadiness',
             title=None)
-    ax_uniqueness.set(xlabel='Acquisition time in clock cycles (50 Mhz)', ylabel='Uniqueness')
+    ax_uniqueness.set(xlabel=xlabel, ylabel='Uniqueness')
     ax_steadiness.set_ylim([0.5, 1])
     ax_steadiness.margins(x=0.02)
     ax_uniqueness.set_ylim([0, 0.6])
@@ -150,24 +166,22 @@ if __name__ == "__main__":
     else:
         yerr = [None] * len(slices)
 
-    ax_steadiness.errorbar(offsets, steadiness_plot_data[0], yerr=yerr[0], fmt='o-', markersize=3, markeredgewidth=1, label='bit 15')
-    ax_steadiness.errorbar(offsets, steadiness_plot_data[1], yerr=yerr[1], fmt='o-', markersize=3, markeredgewidth=1, label='bit 0')
-    ax_steadiness.errorbar(offsets, steadiness_plot_data[2], yerr=yerr[2], fmt='o-', markersize=3, markeredgewidth=1, label='bit 1')
-    ax_steadiness.errorbar(offsets, steadiness_plot_data[3], yerr=yerr[3], fmt='o-', markersize=3, markeredgewidth=1, label='bit 2')
-    ax_steadiness.errorbar(offsets, steadiness_plot_data[4], yerr=yerr[4], fmt='o-', markersize=3, markeredgewidth=1, label='bit 3')
-    ax_steadiness.errorbar(offsets, steadiness_plot_data[5], yerr=yerr[5], fmt='o-', markersize=3, markeredgewidth=1, label='bit 4')
+    ax_steadiness.errorbar(offsets, steadiness_plot_data[0], yerr=yerr[0], markersize=3, markeredgewidth=1, capsize=3, capthick=1, label='bit 15')
+    ax_steadiness.errorbar(offsets, steadiness_plot_data[1], yerr=yerr[1], markersize=3, markeredgewidth=1, capsize=3, capthick=1, label='bit 0')
+    ax_steadiness.errorbar(offsets, steadiness_plot_data[2], yerr=yerr[2], markersize=3, markeredgewidth=1, capsize=3, capthick=1, label='bit 1')
+    ax_steadiness.errorbar(offsets, steadiness_plot_data[3], yerr=yerr[3], markersize=3, markeredgewidth=1, capsize=3, capthick=1, label='bits 15+0')
+    ax_steadiness.errorbar(offsets, steadiness_plot_data[4], yerr=yerr[4], markersize=3, markeredgewidth=1, capsize=3, capthick=1, label='bits 15+0+1')
+    if args.offset_key == 'voltage':
+        ax_steadiness.legend(loc="lower right", ncol=2)
 
-    ax_uniqueness.plot(offsets, uniqueness_plot_data[0], 'o-', markersize=3, markeredgewidth=1)
-    ax_uniqueness.plot(offsets, uniqueness_plot_data[1], 'o-', markersize=3, markeredgewidth=1)
-    ax_uniqueness.plot(offsets, uniqueness_plot_data[2], 'o-', markersize=3, markeredgewidth=1)
-    ax_uniqueness.plot(offsets, uniqueness_plot_data[3], 'o-', markersize=3, markeredgewidth=1)
-    ax_uniqueness.plot(offsets, uniqueness_plot_data[4], 'o-', markersize=3, markeredgewidth=1)
-    ax_uniqueness.plot(offsets, uniqueness_plot_data[5], 'o-', markersize=3, markeredgewidth=1)
-
-    fig.legend(loc="lower right", bbox_to_anchor=(1,0), bbox_transform=ax_uniqueness.transAxes, ncol=2)
+    ax_uniqueness.plot(offsets, uniqueness_plot_data[0], markersize=3, markeredgewidth=1)
+    ax_uniqueness.plot(offsets, uniqueness_plot_data[1], markersize=3, markeredgewidth=1)
+    ax_uniqueness.plot(offsets, uniqueness_plot_data[2], markersize=3, markeredgewidth=1)
+    ax_uniqueness.plot(offsets, uniqueness_plot_data[3], markersize=3, markeredgewidth=1)
+    ax_uniqueness.plot(offsets, uniqueness_plot_data[4], markersize=3, markeredgewidth=1)
 
     if args.export_path:
         # plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
-        plt.savefig(args.export_path, bbox_inches='tight', pad_inches=0)
+        fig.savefig(args.export_path, bbox_inches='tight', pad_inches=0)
     else:
         plt.show()

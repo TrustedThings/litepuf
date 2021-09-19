@@ -6,7 +6,7 @@ from statistics import mode, mean
 from operator import itemgetter
 import ctypes
 
-from metastable.evaluation import steadiness, uniqueness, graycode
+from metastable.evaluation import steadiness, uniqueness, randomness, graycode
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -51,7 +51,10 @@ def parse_dumps(response_dumps, offset_attr, offset=None):
         steadiness_ = list(steadiness(chip, references))
         steadiness_chip = mean(steadiness_)
         steadiness_per_chip.append(steadiness_chip)
-    
+
+    randomness_ = randomness(chips)
+    print('Randomness:', randomness_)
+
     return (
         uniqueness_,
         steadiness_per_chip,
@@ -117,15 +120,30 @@ if __name__ == "__main__":
         print('Steadiness:', steadiness_mean, steadiness_per_chip)
 
     fig, (ax_uniqueness, ax_steadiness) = plt.subplots(2)
-    fig.tight_layout(pad=3.0)
-    fig.set_figheight(5)
+    if args.offset_key == 'voltage':
+        fig, ax_steadiness = plt.subplots()
+        fig.set_figheight(3)
+    else:
+        fig.set_figheight(5)
     fig.set_figwidth(7)
+    fig.tight_layout(pad=3.0)
 
-    ax_steadiness.set(xlabel='Acquisition time in clock cycles (50 Mhz)', ylabel='Steadiness',
+    ax_steadiness.grid(linestyle='dotted')
+    ax_uniqueness.grid(linestyle='dotted')
+
+    xlabels = {
+        'offset': 'Acquisition time in clock cycles (50 Mhz)',
+        'voltage': 'Voltage (V)'
+    }
+    xlabel = xlabels.get(args.offset_key)
+    ax_steadiness.set(xlabel=xlabel, ylabel='Steadiness',
             title=None)
-    ax_uniqueness.set(xlabel='Acquisition time in clock cycles (50 Mhz)', ylabel='Uniqueness')
+    ax_uniqueness.set(xlabel=xlabel, ylabel='Uniqueness')
     ax_steadiness.set_ylim([0.5, 1])
     ax_steadiness.margins(x=0.02)
+    if args.offset_key == 'voltage':
+        ax_steadiness.xaxis.set_major_locator(ticker.MultipleLocator(0.02))
+        ax_steadiness.yaxis.set_major_locator(ticker.MultipleLocator(0.1))
     ax_uniqueness.set_ylim([0, 0.6])
     ax_uniqueness.margins(x=0.02)
     ax_uniqueness.yaxis.set_major_locator(ticker.MultipleLocator(0.1))
@@ -139,15 +157,15 @@ if __name__ == "__main__":
         yerr = None
 
     ax_steadiness.errorbar(
-        offsets, steadiness_plot_data, yerr=yerr, fmt='o-', markersize=3, markeredgewidth=1
+        offsets, steadiness_plot_data, yerr=yerr, markersize=3, markeredgewidth=1, color='b', capsize=3, capthick=1
     )
 
     ax_uniqueness.plot(
-        offsets, uniqueness_plot_data, 'o-', markersize=3, markeredgewidth=1
+        offsets, uniqueness_plot_data, markersize=3, markeredgewidth=1, color='b'
     )
 
     if args.export_path:
         # plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
-        plt.savefig(args.export_path, bbox_inches='tight', pad_inches=0)
+        fig.savefig(args.export_path, bbox_inches='tight', pad_inches=0)
     else:
         plt.show()

@@ -9,6 +9,9 @@ def hamming_dist(x, y):
 def hamming_weight(x):
     return bin(x).count('1')
 
+def bitfield(x, n):
+    return [int(d) for d in bin(x)[2:].zfill(n)]
+
 def bitwise_mode(iterable, n):
     iter_bin = [bin(x)[2:].zfill(n) for x in iterable]
     modes = [statistics.mode(map(itemgetter(b), iter_bin)) for b in range(n)]
@@ -45,8 +48,14 @@ def steadiness(chip_dump, references, response_len=1):
             [distance/response_len for distance in distances]
         )
 
-def randomness():
-    pass
+# bias
+def randomness(chip_dumps, response_len=1):
+    responses = []
+    for chip in chip_dumps:
+        for resp in chip.values():
+            mode = bitwise_mode(resp, response_len)
+            responses.extend(bitfield(mode, response_len))
+    return statistics.mean(responses)
 
 
 import unittest
