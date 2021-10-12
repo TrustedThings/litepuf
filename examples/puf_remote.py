@@ -12,7 +12,7 @@ from litex.tools.litex_client import RemoteClient
 from litescope.software.driver.analyzer import LiteScopeAnalyzerDriver
 from litescope.software.dump import DumpData, Dump
 
-from metastable import PUFType
+from litepuf import PUFType
 
 import argparse
 parser = argparse.ArgumentParser()

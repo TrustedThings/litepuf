@@ -21,12 +21,12 @@ from litex_boards.targets.ecp5_evn import BaseSoC
 
 from litescope import LiteScopeIO, LiteScopeAnalyzer
 
-from metastable import RingOscillator, TEROCell
-from metastable.oscillator import MetastableOscillator
-from metastable.cores import RingOscillatorPUF, TransientEffectRingOscillatorPUF as TEROPUF, PowerOptimizedHybridOscillatorArbiterPUF as HybridOscillatorArbiterPUF
-from metastable.random import RandomLFSR
+from litepuf import RingOscillator, TEROCell
+from litepuf.oscillator import MetastableOscillator
+from litepuf.cores import RingOscillatorPUF, TransientEffectRingOscillatorPUF as TEROPUF, PowerOptimizedHybridOscillatorArbiterPUF as HybridOscillatorArbiterPUF
+from litepuf.random import RandomLFSR
 
-from metastable import PUFType
+from litepuf import PUFType
 
 
 def slicer():

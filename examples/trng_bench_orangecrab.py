@@ -14,9 +14,9 @@ from litex_boards.targets.gsd_orangecrab import BaseSoC
 
 from litescope import LiteScopeIO, LiteScopeAnalyzer
 
-from metastable import RingOscillator
-from metastable.oscillator import MetastableOscillator
-from metastable.random import RandomLFSR
+from litepuf import RingOscillator
+from litepuf.oscillator import MetastableOscillator
+from litepuf.random import RandomLFSR
 
 def slicer():
     slice_iter = cycle("ABCD")

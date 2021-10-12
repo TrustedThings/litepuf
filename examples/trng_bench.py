@@ -16,9 +16,9 @@ from litex_boards.targets.ecp5_evn import BaseSoC
 
 from litescope import LiteScopeAnalyzer
 
-from metastable import RingOscillator
-from metastable.oscillator import MetastableOscillator
-from metastable.random import RandomLFSR
+from litepuf import RingOscillator
+from litepuf.oscillator import MetastableOscillator
+from litepuf.random import RandomLFSR
 
 def slicer():
     slice_iter = cycle("ABCD")

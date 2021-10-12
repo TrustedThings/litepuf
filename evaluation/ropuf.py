@@ -6,7 +6,7 @@ from statistics import mode, mean
 from operator import itemgetter
 import ctypes
 
-from metastable.evaluation import steadiness, uniqueness, randomness, graycode
+from litepuf.evaluation import steadiness, uniqueness, randomness, graycode
 
 import matplotlib
 import matplotlib.pyplot as plt
